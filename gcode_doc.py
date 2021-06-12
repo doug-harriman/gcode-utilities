@@ -27,6 +27,7 @@
 # TODO: Support reading in a G-code file and making that a generic shape.
 # TODO: See if Doc, Layout and Shape can come from the same base class.
 
+from os import P_WAIT
 import numpy as np
 import math
 
@@ -407,7 +408,7 @@ class GridLayout(Layout):
             for j,col in enumerate(row):
 
                 # Index comment
-                doc.AddLine(f'(Grid cell {i,j} )')
+                doc.AddLine(f'(Grid cell {i},{j} )')
 
                 if col == 0:
                     # Nothing in this grid cell.
@@ -3043,7 +3044,7 @@ class DocSpeedPower(Doc):
         header = self.header  # In case user set a header
         header += 'Speed & Power Tuning Print' + self.EOL
         sz = self.Size()
-        header += f'Document size: ({sz[0]:.1f},{sz[1]:.1f}) ' + self.EOL
+        header += f'Document size: {sz[0]:.1f},{sz[1]:.1f} ' + self.EOL
         header += self.EOL
         header += f'Speeds: {self._speeds}' + self.EOL
         header += f'Powers: {self._powers}' + self.EOL
@@ -3151,7 +3152,7 @@ class DocFocus(Doc):
         header = self.header  # In case user set a header
         header += 'Laser Focus Tuning Print' + self.EOL
         sz = self.Size()
-        header += f'Document size: ({sz[0]:.1f},{sz[1]:.1f}) ' + self.EOL
+        header += f'Document size: {sz[0]:.1f},{sz[1]:.1f} ' + self.EOL
         header += self.EOL
         header += f'Heights: {self._heights}' + self.EOL
         self.header = header
@@ -3161,20 +3162,46 @@ class DocFocus(Doc):
 
 if __name__ == '__main__':
 
-    # Speed/power doc
-    # TODO: YAML config file for print
-    # TODO: Command line commands to generate prints from config files.
-    doc_sp = DocSpeedPower(powers=np.array(range(20,80+10,10)),
-                            speeds=np.array(range(200,1200+100,100)))
-    doc_sp.square_size = 5
-    power_default = 40
-    doc_sp.laser_power = power_default
-    doc_sp.laser_power_default = power_default
+    if False:
+        # Speed/power doc
+        # TODO: YAML config file for print
+        # TODO: Command line commands to generate prints from config files.
+        doc_sp = DocSpeedPower(powers=np.array(range(20,80+10,10)),
+                                speeds=np.array(range(200,1200+100,100)))
+        doc_sp.square_size = 5
+        power_default = 40
+        doc_sp.laser_power = power_default
+        doc_sp.laser_power_default = power_default
 
-    # Geneate G-code for document.
-    doc_sp.GCode()
-    doc_sp.Save('speed-power-tuning.nc')
+        # Geneate G-code for document.
+        doc_sp.GCode()
+        doc_sp.Save('speed-power-tuning.nc')
 
-    # Laser focus test print
-    doc_fc = DocFocus()  # Default heights
-    doc_fc.GCode(filename='focus-tuning.nc')
+    if True:
+        # Laser focus test print
+        doc_fc = DocFocus()  # Default heights
+        doc_fc.GCode(filename='focus-tuning.nc')
+
+    if False:
+        if False:  # Horizontal
+            name  = 'Horizontal'
+            angle = 0
+            ph    = 0
+            pw    = 2
+        else:     # Vertical
+            name  = 'Vertical'
+            angle = 90
+            ph    = 2
+            pw    = 0
+
+        # Laser mark alignment lines into spoilboard
+        doc_guide = Doc()
+        doc_guide.laser_power_default = 40
+        doc_guide.layout.padding_height = ph 
+        doc_guide.layout.padding_width  = pw
+        line = Line(length=150, laser_power=40, angle_deg=angle)
+        doc_guide.layout.AddChild(line)
+        doc_guide.header = f'{name} Guide Line for Spoilboard'
+        doc_guide.GCode()
+        doc_guide.Save(f'spoilboard-guide-{name.lower()}.nc')
+
