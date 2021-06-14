@@ -3180,6 +3180,8 @@ if __name__ == '__main__':
     if True:
         # Laser focus test print
         doc_fc = DocFocus()  # Default heights
+        doc_fc.laser_power_default = 50
+        doc_fc.speed_print = 1000
         doc_fc.GCode(filename='focus-tuning.nc')
 
     if False:

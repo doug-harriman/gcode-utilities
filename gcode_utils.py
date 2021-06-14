@@ -12,6 +12,9 @@
 # TODO: Array: rect or rotational arrays.
 # TODO: Fill: Fill the given 2D space (scale up/down & center)
 # TODO: Unit conversion in <-> mm.  Include changing Gxx to set units.
+# TODO: Read units from file.
+# TODO: Convert spindle commands to laser commands.  One way?
+# TODO: Concatenate G-Code files.  Might want to deal with headers.
 
 import re
 import numpy as np

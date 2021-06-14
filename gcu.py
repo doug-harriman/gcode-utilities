@@ -10,6 +10,7 @@ import sys
 
 if __name__ == '__main__':
 
+    # Parser
     parser = argparse.ArgumentParser(description='G-Code utiltity functions for simple G-Code files.')
     parser.add_argument("file",
                         help="G-Code input file name.")
@@ -21,15 +22,37 @@ if __name__ == '__main__':
                            action='store_true',
                            help="Replace input file with output.")
 
-    # Transformative
-    transformgroup = parser.add_argument_group(title="Tranformation commands")
-    transformgroup.add_argument("-tc","--translate_center",
+    # Transformative - Basic
+    btransformgroup = parser.add_argument_group(title="Basic G-Code tranformation commands")
+    btransformgroup.add_argument("-tc","--translate_center",
                         action='store_true',
                         help="Translate G-Code so that bounding box center point is (0,0,0).")
-    transformgroup.add_argument("-tll","--translate_lower_left",
+    btransformgroup.add_argument("-tll","--translate_lower_left",
                         action='store_true',
                         help="Translate G-Code so that bounding box lower left point is (0,0,0).")
     
+    # TranTransformative - Complex
+    ctransformgroup = parser.add_argument_group(title="Complex G-Code tranformation commands")
+    ctransformgroup.add_argument('-tx','--translate',
+                                help="Translate G-Code position based on values set by 'x', 'y' and 'z' options.",
+                                action='store_true')
+    ctransformgroup.add_argument('-x',
+                                help="X direction value.",
+                                type=float,
+                                default=0.0)
+    ctransformgroup.add_argument('-y',
+                                help="Y direction value.",
+                                type=float,
+                                default=0.0)
+    ctransformgroup.add_argument('-z',
+                                help="Z direction value.",
+                                type=float,
+                                default=0.0)
+    ctransformgroup.add_argument('-s','--scale',
+                                help="Scale G-Code by value provided.",
+                                type=float,
+                                default=None)
+
     # Informational                         
     infogroup = parser.add_argument_group(title="Informational commands",
                                           description="Processed after any trasnformation commands.")
@@ -55,6 +78,13 @@ if __name__ == '__main__':
     if args.translate_lower_left:
         have_transform = True
         gcu.TranslateLowerLeft()
+
+    if args.translate:
+        have_transform = True
+        gcu.Translate(x=args.x,y=args.y,z=args.z)
+
+    if args.scale is not None:
+        gcu.Scale(scale_factor=args.scale)
 
     # Output G-Code
     if have_transform:
