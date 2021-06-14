@@ -36,6 +36,34 @@ class GcodeUtils():
 
     _re_num = '([+-]?[0-9.]+)'
 
+    def __init__(self,file:str=None,gcode:str=None):
+        if file is not None:
+            self.Load(file)
+
+        if gcode is not None:
+            self.gcode = gcode
+
+    def __str__(self) -> str:
+        return self._gcode
+
+    @property
+    def filename(self) -> str:
+        '''
+        Returns name of G-Code file loaded for processing.
+        '''
+        return self._filename
+
+    @property
+    def gcode(self) -> str:
+        '''
+        G-Code string.
+        '''
+        return self._gcode
+
+    @gcode.setter
+    def gcode(self,value:str):
+        self._gcode = gcode
+
     def Load(self,filename:str):
         '''
         Loads a G-code file for processing.
@@ -261,7 +289,8 @@ class GcodeUtils():
     #     '''
     #     raise NotImplementedError()
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
+
     # gu = GcodeUtils()
     # gu.Load("C:\\tmp\\logo_0001.nc")
     # print(f'Pre-move extents: {gu.Extents()}')
@@ -274,11 +303,11 @@ if __name__ == '__main__':
     # gu.Scale(scale_factor=2)
     # gu.SaveAs("c:\\tmp\\logo-scaled2x.nc")
 
-    gu = GcodeUtils()
-    fn = "dlh-designs-logo-"
-    # fn = fn + "text"
-    fn = fn + "outline"
-    gu.Load(fn + ".nc")
-    gu.TranslateCenter()
-    gu.Translate(x=1,y=1)
-    gu.SaveAs(fn + "-fixed.nc")
+    # gu = GcodeUtils()
+    # fn = "notebook-logo"
+    # # fn = fn + "text"
+    # # fn = fn + "outline"
+    # gu.Load(fn + ".nc")
+    # gu.TranslateCenter()
+    # # gu.Translate(x=1,y=1)
+    # gu.SaveAs(fn + "-fixed.nc")
