@@ -215,6 +215,15 @@ class GcodeUtils():
         ext = self.Extents()
         self.Translate(xyz=-ext)
 
+    def TranslateLowerRight(self):
+        '''
+        Translates G-Code so that lower right corner is at the origin/home position.
+        
+        See also: GcodeUtils.TranslateCenter
+        '''
+        ext = self.Extents()
+        self.Translate(x=ext[0],y=-ext[1],z=-ext[2])
+
     def Scale(self,scale_factor:float=1.0):
         '''
         Performs an in-place scaling of the G-Code.

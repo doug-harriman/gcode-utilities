@@ -30,6 +30,9 @@ if __name__ == '__main__':
     btransformgroup.add_argument("-tll","--translate_lower_left",
                         action='store_true',
                         help="Translate G-Code so that bounding box lower left point is (0,0,0).")
+    btransformgroup.add_argument("-tlr","--translate_lower_right",
+                        action='store_true',
+                        help="Translate G-Code so that bounding box lower right point is (0,0,0).")
     
     # TranTransformative - Complex
     ctransformgroup = parser.add_argument_group(title="Complex G-Code tranformation commands")
@@ -79,11 +82,16 @@ if __name__ == '__main__':
         have_transform = True
         gcu.TranslateLowerLeft()
 
+    if args.translate_lower_right:
+        have_transform = True
+        gcu.TranslateLowerRight()
+
     if args.translate:
         have_transform = True
         gcu.Translate(x=args.x,y=args.y,z=args.z)
 
     if args.scale is not None:
+        have_transform = True
         gcu.Scale(scale_factor=args.scale)
 
     # Output G-Code
@@ -115,6 +123,7 @@ if __name__ == '__main__':
         print(f'Extents: ')
         print(f'  x_min={ext[0]}, \ty_min={ext[1]}, \tz_min={ext[2]}')
         print(f'  x_max={ext[3]}, \ty_max={ext[4]}, \tz_max={ext[5]}')
+        print(f'  dx={ext[3]-ext[0]}, \tdy={ext[4]-ext[1]}, \tdz={ext[5]-ext[2]}')
     if args.extents:
         have_informational = True
         print_extents()
