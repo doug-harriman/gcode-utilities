@@ -61,6 +61,21 @@ if __name__ == '__main__':
                                 help="Scale G-Code by value provided.",
                                 type=float,
                                 default=None)
+    ctransformgroup.add_argument('--change_speed',
+                                help="Change speed value from old value to new value, specified by --old and --new.",
+                                action='store_true')
+    ctransformgroup.add_argument('--change_power',
+                                help="Change power value from old value to new value, specified by --old and --new.",
+                                action='store_true')
+    ctransformgroup.add_argument('--old',
+                                help="Original value for value changes.",
+                                type=float,
+                                default=None)
+    ctransformgroup.add_argument('--new',
+                                help="New value for value changes.",
+                                type=float,
+                                default=None)
+
 
     # Informational                         
     infogroup = parser.add_argument_group(title="Informational commands",
@@ -114,6 +129,24 @@ if __name__ == '__main__':
     if args.scale is not None:
         have_transform = True
         gcu.Scale(scale_factor=args.scale)
+
+    if args.change_speed:
+        have_transform = True
+        if args.old is None:
+            print("error: old value required for change_speed")
+        if args.new is None:
+            print("error: new value required for change_speed")
+
+        gcu.ReplaceValue(command='F',oldvalue=args.old,newvalue=args.new)
+
+    if args.change_power:
+        have_transform = True
+        if args.old is None:
+            print("error: old value required for change_power")
+        if args.new is None:
+            print("error: new value required for change_power")
+
+        gcu.ReplaceValue(command='M4 S',oldvalue=args.old,newvalue=args.new)
 
     # Output G-Code
     if have_transform:
