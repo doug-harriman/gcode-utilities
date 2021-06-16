@@ -15,6 +15,8 @@
 # TODO: Read units from file.
 # TODO: Convert spindle commands to laser commands.  One way?
 # TODO: Concatenate G-Code files.  Might want to deal with headers.
+# TODO: Read laser power values
+# TODO: Set/transform laser power values.
 
 import re
 import numpy as np
@@ -123,11 +125,11 @@ class GcodeUtils():
 
         # Replacement functions
         def offset_x(match):
-            return f'X{float(match.group(1))+x}'
+            return f'X{float(match.group(1))+x:0.3f}'
         def offset_y(match):
-            return f'Y{float(match.group(1))+y}'
+            return f'Y{float(match.group(1))+y:0.3f}'
         def offset_z(match):
-            return f'Z{float(match.group(1))+z}'
+            return f'Z{float(match.group(1))+z:0.3f}'
 
         self._gcode = re.sub(f'X{self._re_num}',offset_x,self._gcode)        
         self._gcode = re.sub(f'Y{self._re_num}',offset_y,self._gcode)        
@@ -222,7 +224,7 @@ class GcodeUtils():
         See also: GcodeUtils.TranslateCenter
         '''
         ext = self.Extents()
-        self.Translate(x=ext[0],y=-ext[1],z=-ext[2])
+        self.Translate(x=-ext[3],y=-ext[1],z=-ext[2])
 
     def Scale(self,scale_factor:float=1.0):
         '''
@@ -244,11 +246,11 @@ class GcodeUtils():
         
         # Helper functions
         def scale_x(match):
-            return f'X{float(match.group(1))*scale_factor}'
+            return f'X{float(match.group(1))*scale_factor:0.3f}'
         def scale_y(match):
-            return f'Y{float(match.group(1))*scale_factor}'
+            return f'Y{float(match.group(1))*scale_factor:0.3f}'
         def scale_z(match):
-            return f'Z{float(match.group(1))*scale_factor}'
+            return f'Z{float(match.group(1))*scale_factor:0.3f}'
 
         # Perform scaling
         self._gcode = re.sub(f'X{self._re_num}',scale_x,self._gcode)        
