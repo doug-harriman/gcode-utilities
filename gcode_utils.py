@@ -226,6 +226,24 @@ class GcodeUtils():
         ext = self.Extents()
         self.Translate(x=-ext[3],y=-ext[1],z=-ext[2])
 
+    def TranslateUpperLeft(self):
+        '''
+        Translates G-Code so that upper left corner is at the origin/home position.
+        
+        See also: GcodeUtils.TranslateCenter
+        '''
+        ext = self.Extents()
+        self.Translate(x=-ext[0],y=-ext[4],z=-ext[5])
+
+    def TranslateUpperRight(self):
+        '''
+        Translates G-Code so that upper right corner is at the origin/home position.
+        
+        See also: GcodeUtils.TranslateCenter
+        '''
+        ext = self.Extents()
+        self.Translate(x=-ext[3],y=-ext[4],z=-ext[5])
+
     def Scale(self,scale_factor:float=1.0):
         '''
         Performs an in-place scaling of the G-Code.
@@ -261,6 +279,43 @@ class GcodeUtils():
         center_post  = self.Center()
         center_delta = center_pre - center_post
         self.Translate(xyz=center_delta)
+
+    def Speeds(self) -> np.array:
+        '''
+        Lists all unique speed values used in G-Code.
+
+        Returns
+        -------
+        np.array
+             Numpy Array with one entry per speed value used in G-Code.
+        '''
+
+        speeds = re.findall(f'F{self._re_num}',self._gcode)  
+        speeds = list(set(speeds))                     # Get unique values.
+        speeds = list(map(lambda x: float(x), speeds)) # string -> float
+        speeds.sort()                    
+        speeds = np.array(speeds)                  
+
+        return speeds
+
+    def Powers(self) -> np.array:
+        '''
+        Lists all unique laser power values in G-Code.
+        
+        Returns
+        -------
+        np.array
+            Numpy Array with one entry per power value used in G-Code.
+        '''
+
+        powers = re.findall(f'M4\sS{self._re_num}',self._gcode)  
+        powers = list(set(powers))                     # Get unique values.
+        powers = list(map(lambda x: float(x), powers)) # string -> float
+        powers.sort()                    
+        powers = np.array(powers)                  
+
+        return powers
+        
 
     # def Rotate(self,angle_deg:float=0.0):
     #     '''
@@ -303,7 +358,11 @@ class GcodeUtils():
     #     '''
     #     raise NotImplementedError()
 
-# if __name__ == '__main__':
+if __name__ == '__main__':
+
+    gcu = GcodeUtils(file='logo.nc')
+    print(gcu.Speeds())
+    print(gcu.Powers())
 
     # gu = GcodeUtils()
     # gu.Load("C:\\tmp\\logo_0001.nc")

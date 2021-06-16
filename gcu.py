@@ -33,7 +33,13 @@ if __name__ == '__main__':
     btransformgroup.add_argument("-tlr","--translate_lower_right",
                         action='store_true',
                         help="Translate G-Code so that bounding box lower right point is (0,0,0).")
-    
+    btransformgroup.add_argument("-tul","--translate_upper_left",
+                        action='store_true',
+                        help="Translate G-Code so that bounding box lower left point is (0,0,0).")
+    btransformgroup.add_argument("-tur","--translate_upper_right",
+                        action='store_true',
+                        help="Translate G-Code so that bounding box lower right point is (0,0,0).")
+
     # TranTransformative - Complex
     ctransformgroup = parser.add_argument_group(title="Complex G-Code tranformation commands")
     ctransformgroup.add_argument('-tx','--translate',
@@ -65,6 +71,13 @@ if __name__ == '__main__':
     infogroup.add_argument("-e","--extents",
                         action='store_true',
                         help="Display G-Code bounding box extents.")
+    infogroup.add_argument("--speeds",
+                        action='store_true',
+                        help="Display unique speed values in G-Code.")
+    infogroup.add_argument("--powers",
+                        action='store_true',
+                        help="Display unique laser power values in G-Code.")
+
     
     args = parser.parse_args()
     
@@ -85,6 +98,14 @@ if __name__ == '__main__':
     if args.translate_lower_right:
         have_transform = True
         gcu.TranslateLowerRight()
+
+    if args.translate_upper_left:
+        have_transform = True
+        gcu.TranslateUpperLeft()
+
+    if args.translate_upper_right:
+        have_transform = True
+        gcu.TranslateUpperRight()
 
     if args.translate:
         have_transform = True
@@ -121,17 +142,41 @@ if __name__ == '__main__':
     def print_extents():
         ext = gcu.Extents()
         print(f'Extents: ')
-        print(f'  x_min={ext[0]}, \ty_min={ext[1]}, \tz_min={ext[2]}')
-        print(f'  x_max={ext[3]}, \ty_max={ext[4]}, \tz_max={ext[5]}')
-        print(f'  dx={ext[3]-ext[0]}, \tdy={ext[4]-ext[1]}, \tdz={ext[5]-ext[2]}')
+        print(f'  x_min={ext[0]}\t\ty_min={ext[1]}\t\tz_min={ext[2]}')
+        print(f'  x_max={ext[3]}\t\ty_max={ext[4]}\t\tz_max={ext[5]}')
+        print(f'     dx={ext[3]-ext[0]}\t\t   dy={ext[4]-ext[1]}\t\t   dz={ext[5]-ext[2]}')
     if args.extents:
         have_informational = True
         print_extents()
+
+    def print_speeds():
+        values = gcu.Speeds()
+        if values is None:
+            return
+        values = list(values)  # str will now comma separate
+        values = str(values).replace('[','').replace(']','')
+        print(f'Speeds : {values}')
+    if args.speeds:
+        have_informational = True
+        print_speeds()
+
+    def print_powers():
+        values = gcu.Powers()
+        if values is None:
+            return
+        values = list(values)  # str will now comma separate
+        values = str(values).replace('[','').replace(']','')
+        print(f'Powers : {values}')
+    if args.powers:
+        have_informational = True
+        print_powers()
 
     # Default if given filename and nothing else:
     if not (have_informational or have_transform):
         print()
         print('G-Code Utilities Information')
         print(f'File   : {gcu.filename}') 
+        print_speeds()
+        print_powers()
         print_center()
         print_extents()
