@@ -51,6 +51,16 @@ class GcodeUtils():
     def __str__(self) -> str:
         return self._gcode
 
+    def _to_str(self,value) -> str:
+        '''
+        Converts a numeric scalar to a string value, making integer if possible.
+        '''
+        if np.mod(value,1) == 0:
+            # Integer
+            return str(int(value))
+        else:
+            return format(value,'0.3f')
+
     @property
     def filename(self) -> str:
         '''
@@ -125,11 +135,14 @@ class GcodeUtils():
 
         # Replacement functions
         def offset_x(match):
-            return f'X{float(match.group(1))+x:0.3f}'
+            value = float(match.group(1)) + x
+            return f'X{value}'
         def offset_y(match):
-            return f'Y{float(match.group(1))+y:0.3f}'
+            value = float(match.group(1)) + y
+            return f'Y{value}'
         def offset_z(match):
-            return f'Z{float(match.group(1))+z:0.3f}'
+            value = float(match.group(1)) + z
+            return f'Z{value}'
 
         self._gcode = re.sub(f'X{self._re_num}',offset_x,self._gcode)        
         self._gcode = re.sub(f'Y{self._re_num}',offset_y,self._gcode)        
@@ -264,11 +277,14 @@ class GcodeUtils():
         
         # Helper functions
         def scale_x(match):
-            return f'X{float(match.group(1))*scale_factor:0.3f}'
+            value = self._to_str(float(match.group(1))*scale_factor)
+            return f'X{value}'
         def scale_y(match):
-            return f'Y{float(match.group(1))*scale_factor:0.3f}'
+            value = self._to_str(float(match.group(1))*scale_factor)
+            return f'Y{value}'
         def scale_z(match):
-            return f'Z{float(match.group(1))*scale_factor:0.3f}'
+            value = self._to_str(float(match.group(1))*scale_factor)
+            return f'Z{value}'
 
         # Perform scaling
         self._gcode = re.sub(f'X{self._re_num}',scale_x,self._gcode)        
@@ -308,7 +324,7 @@ class GcodeUtils():
             Numpy Array with one entry per power value used in G-Code.
         '''
 
-        powers = re.findall(f'M4\sS{self._re_num}',self._gcode)  
+        powers = re.findall(f'M4\sS{self._re_num}',self.gcode)  
         powers = list(set(powers))                     # Get unique values.
         powers = list(map(lambda x: float(x), powers)) # string -> float
         powers.sort()                    
@@ -316,6 +332,40 @@ class GcodeUtils():
 
         return powers
         
+    def ReplaceValue(self,command:str,oldvalue:float,newvalue:float):
+        '''
+        Replaces a specific numeric value of a command with a new value.
+        Values are matched with numpy.isclose
+
+        Parameters
+        ----------
+        command: str
+            Command of interest for value replacement.
+
+        oldvalue: float
+            Current value in G-Code.
+
+        newvalue: float
+            Replacement value.
+
+        Example
+        -------
+        ReplaceValue(command="F",1000.0,1500.0)
+        Will replace all occurences of "F1000" with "F1500"
+
+        See also: Speeds, Powers
+        '''
+
+        # Helper functions
+        def check_replace(match):
+            value = float(match.group(1))
+            if np.isclose(value,oldvalue):
+                return f'{command}{self._to_str(newvalue)}'
+            else:
+                return f'{command}{self._to_str(value)}'
+
+        # Perform scaling
+        self._gcode = re.sub(f'{command}{self._re_num}',check_replace,self.gcode) 
 
     # def Rotate(self,angle_deg:float=0.0):
     #     '''
@@ -358,11 +408,18 @@ class GcodeUtils():
     #     '''
     #     raise NotImplementedError()
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
 
-    gcu = GcodeUtils(file='logo.nc')
-    print(gcu.Speeds())
-    print(gcu.Powers())
+#     gcu = GcodeUtils(file='logo.nc')
+#     print('Before:')
+#     print(gcu.Powers())
+#     print('')
+
+#     gcu.ReplaceValue('F',1000,1000)
+
+#     print('After:')
+#     print(gcu.Powers())
+#     gcu.Save()
 
     # gu = GcodeUtils()
     # gu.Load("C:\\tmp\\logo_0001.nc")
