@@ -15,8 +15,6 @@
 # TODO: Read units from file.
 # TODO: Convert spindle commands to laser commands.  One way?
 # TODO: Concatenate G-Code files.  Might want to deal with headers.
-# TODO: Read laser power values
-# TODO: Set/transform laser power values.
 
 import re
 import numpy as np
