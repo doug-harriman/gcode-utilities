@@ -20,7 +20,6 @@ class Operation(Enum):
     CUTOUT = 1  # Cut shape out.  Tool on outside of boundary.
     POCKET = 2  # Create a pocket.  Tool on inside of boundary.
 
-
 class ToolPath():
 
     # Common path parameters
@@ -252,6 +251,7 @@ class ToolPathRectange(ToolPath):
         self.y = y
         self.width  = width
         self.height = height
+        self.operation = operation
 
     @property
     def width(self) -> float:
@@ -350,11 +350,14 @@ class ToolPathRectange(ToolPath):
         # Information
         # TODO: Update when units supported
         self.AddLine(f'; Rectangle: {self._to_str(self.width)}mm X {self._to_str(self.height)}mm')
-        self.AddLine(f';  offset: x:{self._to_str(self.x)}, y:{self._to_str(self.y)}')
-        self.AddLine(f';  top   : {self._to_str(self.z_top)}')
-        self.AddLine(f';  bottom: {self._to_str(self.z_bottom)}')
-        self.AddLine(f';  DOC   : {self._to_str(self.z_step)}')
-        self.AddLine(f';  passes: {self._to_str(n_passes)}')
+        self.AddLine(f';  position: x:{self._to_str(self.x)}, y:{self._to_str(self.y)}')
+        self.AddLine(f';  z top   : {self._to_str(self.z_top)}')
+        self.AddLine(f';  z bottom: {self._to_str(self.z_bottom)}')
+        self.AddLine(f';  DOC     : {self._to_str(self.z_step)}')
+        self.AddLine(f';  passes  : {self._to_str(n_passes)}')
+        self.AddLine(f';  tool dia: {self._to_str(self.tool_dia)}')
+        op = format(self.operation).replace('.',': ')
+        self.AddLine(f'; {op}')
         self.AddLine()
 
         # Go to starting position
