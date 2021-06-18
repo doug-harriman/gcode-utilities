@@ -443,6 +443,7 @@ if __name__ == '__main__':
     # Load laser pattern data & calc cutout info
     import gcode_utils
     gcu = gcode_utils.GcodeUtils('speed-power-tuning.nc')
+    gcu.TranslateLowerLeft()  # We'll start in lower left, so treat pattern as there.
     ext = gcu.Extents()
     w = ext[3]-ext[0]
     h = ext[4]-ext[1]
@@ -450,7 +451,7 @@ if __name__ == '__main__':
     # Generate cutout path.
     clearance = 1 
     tp = ToolPathRectange(x=ext[0]-clearance, y=ext[1]-clearance, 
-                          width=w+clearance, height=h+clearance, 
+                          width=w+2*clearance, height=h+2*clearance, 
                           operation=Operation.CutOut)
     tp.tool_dia = 3.175
     tp.speed_position = 1500
