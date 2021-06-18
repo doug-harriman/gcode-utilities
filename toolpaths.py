@@ -183,6 +183,32 @@ class ToolPath():
         self._tool_dia = value
 
     @property
+    def speed_feed(self) -> float:
+        '''
+        Feed speed for cutting operations.
+        '''
+        return self._speed_feed
+
+    @speed_feed.setter
+    def speed_feed(self,value:float):
+        if value < 0:
+            value = -value
+        self._speed_feed = value
+
+    @property
+    def speed_position(self) -> float:
+        '''
+        Speed for non-cutting tool positioning operations.
+        '''
+        return self._speed_position
+
+    @speed_position.setter
+    def speed_position(self,value:float):
+        if value < 0:
+            value = -value
+        self._speed_position = value
+
+    @property
     def tool_rad(self) -> float:
         '''
         Tool radius.
@@ -413,8 +439,24 @@ class ToolPathRectange(ToolPath):
 
 if __name__ == '__main__':
 
-    tp = ToolPathRectange(x=1, y=1, width=30, height=20, operation=Operation.CutOut)
+    # Cut out laser pattern
+    # Load laser pattern data & calc cutout info
+    import gcode_utils
+    gcu = gcode_utils.GcodeUtils('speed-power-tuning.nc')
+    ext = gcu.Extents()
+    w = ext[3]-ext[0]
+    h = ext[4]-ext[1]
+
+    # Generate cutout path.
+    clearance = 1 
+    tp = ToolPathRectange(x=ext[0]-clearance, y=ext[1]-clearance, 
+                          width=w+clearance, height=h+clearance, 
+                          operation=Operation.CutOut)
     tp.tool_dia = 3.175
+    tp.speed_position = 1500
+    tp.speed_feed     = 1000
+    tp.z_top = 0
+    tp.z_bottom = -6 # Acrylic thickness, not in laser file.
     tp.GCode()
     tp.Save('rectangle-test.nc')
 
