@@ -17,8 +17,8 @@ import numpy as np
 
 @unique
 class Operation(Enum): 
-    CUTOUT = 1  # Cut shape out.  Tool on outside of boundary.
-    POCKET = 2  # Create a pocket.  Tool on inside of boundary.
+    CutOut = 1  # Cut shape out.  Tool on outside of boundary.
+    Pocket = 2  # Create a Pocket.  Tool on inside of boundary.
 
 class ToolPath():
 
@@ -38,7 +38,7 @@ class ToolPath():
     _z_retract =  3.0
     _z_step    = 0.25  # Stepdown between passes
 
-    _operation = Operation.CUTOUT
+    _operation = Operation.CutOut
 
     _gcode = ''  # Generated G-Code
 
@@ -71,7 +71,7 @@ class ToolPath():
     @property
     def operation(self) -> Operation:
         '''
-        Operation type: CUTOUT or POCKET.
+        Operation type: CutOut or Pocket.
         '''
         return self._operation
 
@@ -244,7 +244,7 @@ class ToolPathRectange(ToolPath):
     _width  = 10.0  # X-width
     _height = 10.0  # Y-height
 
-    def __init__(self,x:float=0,y:float=0,width:float=10,height:float=10,operation:Operation=Operation.POCKET):
+    def __init__(self,x:float=0,y:float=0,width:float=10,height:float=10,operation:Operation=Operation.Pocket):
         super().__init__()
 
         self.x = x
@@ -292,7 +292,7 @@ class ToolPathRectange(ToolPath):
 
         # Generate array of corner positions.
         rt = self.tool_rad
-        if self.operation == Operation.POCKET:
+        if self.operation == Operation.Pocket:
             rt = -rt
 
         # Base positions with lower left at (0,0)
@@ -360,15 +360,30 @@ class ToolPathRectange(ToolPath):
         self.AddLine(f'; {op}')
         self.AddLine()
 
+        # TODO: Move this to base class header.
+        # Header
+        self.AddLine('G21 ; Units: mm')
+        self.AddLine('G94 ; Speed in units per minute')
+        self.AddLine('G17 ; XY Plane')
+        self.AddLine('G54 ; Coordinate system 1')
+        self.AddLine('G90 ; ABS positioning mode')
+        self.AddLine()
+
         # Go to starting position
         self.AddLine('; Position for start')
         self.AddLine(f'G0 Z{z_retract} F{speed_position}')
         self.AddLine(f'G0 X{self._to_str(positions[0,0])} Y{self._to_str(positions[0,1])}')
+        self.AddLine()
 
         # Start spindle (or laser?)
-        # TODO: Start spindle
+        # Start spindle
+        self.AddLine('; Start Spindle')
+        self.AddLine('M3 S5000')  # TODO: parameterize spindle speed
+        self.AddLine('G1 P1    ; Wait to spin up')
+        self.AddLine()
 
         # Set initial Z position
+        self.AddLine('; Move to start position')
         self.AddLine(f'G1 Z{self._to_str(self.z_top)} F{speed_feed}')
 
         for i_pass in range(0,n_passes):
@@ -398,7 +413,7 @@ class ToolPathRectange(ToolPath):
 
 if __name__ == '__main__':
 
-    tp = ToolPathRectange(x=1, y=1, width=30, height=20, operation=Operation.CUTOUT)
+    tp = ToolPathRectange(x=1, y=1, width=30, height=20, operation=Operation.CutOut)
     tp.tool_dia = 3.175
     tp.GCode()
     tp.Save('rectangle-test.nc')
