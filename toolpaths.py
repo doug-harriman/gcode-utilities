@@ -148,7 +148,7 @@ class ToolPath():
 
     @z_step.setter
     def z_step(self,value:float):
-        if value > 0:
+        if value < 0:
             value = -value
 
         self._z_step = value
@@ -326,16 +326,25 @@ class ToolPathRectange(ToolPath):
                              [self.width+rt,       -rt     ],
                              [self.width+rt, self.height+rt], 
                              [-rt,           self.height+rt ]])
-        
+
         # Add in offsets
         positions[:,0] += self.x
         positions[:,1] += self.y
-        
+        pos_start = positions[0,:]
+
         # Side lengths
         # TODO: Convert to for loop
         lengths = np.array([positions[1,0]-positions[0,0],
                             positions[2,1]-positions[1,1]])
         lengths = np.append(lengths,lengths,axis=0)
+
+        # Now we get a bit trick.  We want the first move to be from the LL corner
+        # to the LR corner, and the last move to be from the UL to the LL.
+        # Rotate the position matrix.
+        positions = np.roll(positions,positions.shape[0]-1,axis=0)
+
+        # print(pos_start)
+        # print(positions)
 
         # Simple for a rectangle.  Should convert to a polygon formula for abstraction.
         width  = self.width  + 2*rt
@@ -351,15 +360,17 @@ class ToolPathRectange(ToolPath):
 
         # Calulate Z height at each corner for the first pass.
         z = np.zeros(lengths.size)
-        for idx in range(0,z.size-1):
+        for idx in range(0,z.size):
             length = lengths[idx]
             if length < plunge_dist: 
                 # Won't complete plunge on this side.
-                z[idx+1] = z[idx] - self.z_step * length / plunge_dist
+                z[idx] = z[idx-1] - self.z_step * length / plunge_dist
                 plunge_dist -= length  # Remaning plunge distance
 
             else:
-                z[idx+1] = -self.z_step
+                z[idx] = -self.z_step
+
+        # print(z)
 
         # Determine total number of passes
         n_passes = (self.z_top - self.z_bottom) / self.z_step
@@ -398,7 +409,7 @@ class ToolPathRectange(ToolPath):
         # Go to starting position
         self.AddLine('; Position for start')
         self.AddLine(f'G0 Z{z_retract} F{speed_position}')
-        self.AddLine(f'G0 X{self._to_str(positions[0,0])} Y{self._to_str(positions[0,1])}')
+        self.AddLine(f'G0 X{self._to_str(pos_start[0])} Y{self._to_str(pos_start[1])}')
         self.AddLine()
 
         # Start spindle (or laser?)
@@ -414,7 +425,7 @@ class ToolPathRectange(ToolPath):
 
         for i_pass in range(0,n_passes):
             self.AddLine()
-            self.AddLine(f'; Pass {i_pass}')
+            self.AddLine(f'; Pass {i_pass+1}')
 
             for idx, position in enumerate(positions):
                 x_str = self._to_str(position[0])
@@ -458,6 +469,7 @@ if __name__ == '__main__':
     tp.speed_feed     = 1000
     tp.z_top = 0
     tp.z_bottom = -6 # Acrylic thickness, not in laser file.
+    tp.z_step = 0.25
     tp.GCode()
     tp.Save('rectangle-test.nc')
 
