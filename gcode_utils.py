@@ -368,28 +368,46 @@ class GcodeUtils():
         # Perform scaling
         self._gcode = re.sub(f'{command}{self._re_num}',check_replace,self.gcode) 
 
-    # def Rotate(self,angle_deg:float=0.0):
-    #     '''
-    #     Performs an in-place 2D rotation of the G-Code in the X-Y plane.
+    def Rotate(self,rotation:np.ndarray=np.eye(3)):
+        '''
+        Performs an in-place 3D rotation of the G-Code.
+        Will only modify lines that have an X, Y and Z position.
 
-    #     Parameters
-    #     ----------
-    #     angle_deg: float
-    #         Angle of rotation expressed in degrees.
-    #     '''
+        Parameters
+        ----------
+        rotation: 3x3 numpy.ndarray rotation matrix.
+        '''
 
-    #     # TODO: Rotation requires tracking of points, as XY may not be in the same line.
+        # Steps:
+        # - find our center point
+        # - tranlate so we're centered at the origin.
+        # - perform the rotation
+        # - tranlate back to our original position
+        center = self.Center()
+        self.TranslateCenter()
 
-    #     # Steps:
-    #     # - find our center point
-    #     # - tranlate so we're centered at the origin.
-    #     # - perform the rotation
-    #     # - tranlate back to our original position
-    #     center = self.Center()
-    #     self.TranslateCenter()
+        # Rotation
+        def rot(match):
+            x = float(match.group(1))
+            y = float(match.group(2))
+            z = float(match.group(3))
 
-    #     # Rotation
-    #     theta = np.radians(angle_deg)
+            v = np.array([x,y,z])
+            print(f'Before: {v}')
+            v = np.matmul(rotation,v)
+            print(f'After : {v}')
+
+            xs = self._to_str(v[0])
+            ys = self._to_str(v[1])
+            zs = self._to_str(v[2])
+
+            return f'X{xs} Y{ys} Z{zs}'
+
+        expr = f'X{self._re_num}\s*Y{self._re_num}\s*Z{self._re_num}'
+        self._gcode = re.sub(expr,rot,self._gcode) 
+
+        # Return to starting position
+        self.Translate(xyz=center)
 
     # def RotateAbout(self,x_center:float=0.0,y_center:float=0.0,angle_deg:float=0.0):
     #     '''
