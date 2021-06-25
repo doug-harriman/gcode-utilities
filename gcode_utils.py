@@ -75,7 +75,7 @@ class GcodeUtils():
 
     @gcode.setter
     def gcode(self,value:str):
-        self._gcode = gcode
+        self._gcode = value
 
     def Load(self,filename:str):
         '''
@@ -134,12 +134,15 @@ class GcodeUtils():
         # Replacement functions
         def offset_x(match):
             value = float(match.group(1)) + x
+            value = self._to_str(value)
             return f'X{value}'
         def offset_y(match):
             value = float(match.group(1)) + y
+            value = self._to_str(value)
             return f'Y{value}'
         def offset_z(match):
             value = float(match.group(1)) + z
+            value = self._to_str(value)
             return f'Z{value}'
 
         self._gcode = re.sub(f'X{self._re_num}',offset_x,self._gcode)        
