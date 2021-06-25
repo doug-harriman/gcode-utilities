@@ -479,13 +479,19 @@ class Doc:
     # Document layout
     _layout = None
 
-    def __init__(self):
+    # Add job control
+    _job_control = True
+
+    def __init__(self,job_control:bool=True):
 
         # Set laser power to default.
         self._laser_power = self._laser_power_default
 
         # Set layout
         self._layout = CellLayout()
+
+        # Job control
+        self._job_control = job_control
 
     @property
     def x(self)->float:
@@ -754,12 +760,13 @@ class Doc:
             self.code += f'({header})' + self.EOL
 
         # Prerequisites
-        self.AddLine()
-        self.AddLine('(Machine Setup)')
-        self.AddLine(f'G90  (Absolute Position Mode)')
-        # self.AddLine(f'G20  (Units = inches)')  # TODO: General Feature: Add property set units and select line.
-        self.AddLine(f'G21  (Units = millimeters)')
-        self.AddLine()
+        if self._job_control:
+            self.AddLine()
+            self.AddLine('(Machine Setup)')
+            self.AddLine(f'G90  (Absolute Position Mode)')
+            # self.AddLine(f'G20  (Units = inches)')  # TODO: General Feature: Add property set units and select line.
+            self.AddLine(f'G21  (Units = millimeters)')
+            self.AddLine()
 
         # Contents
         self._layout.x = self.x
@@ -776,8 +783,10 @@ class Doc:
         # self.AddLine(f'G0 X0 Y0')
 
         # End document
-        self.code += self.EOL 
-        self.code += 'M2' + ' (End Document)' + self.EOL
+        if self._job_control:
+            self.code += self.EOL 
+            self.code += 'M2' + ' (End Document)' + self.EOL
+
         if len(self._footer) > 0:
             self.code += f'({self._footer})' + self.EOL
 
@@ -1474,28 +1483,34 @@ class Text(Shape):
             doc.laser_power = self.laser_power
 
         # replace placeholder string commands with GCODE commands
-        for count, command in enumerate(self.operations_final):
-            if command == "off":
-                self.operations_final[count] = doc.laser_off
-            elif command == "on":
-                self.operations_final[count] = doc.laser_on
-            elif command == "fast":
-                self.operations_final[count] = f'G0 F{doc.speed_position:0.1f}'
-            elif command == "slow":
-                # Set print speed, using default if needed.
-                if self.speed_print is None:
-                    self.operations_final[count] = f'G1 F{doc.speed_print:0.1f}'
-                else:
-                    self.operations_final[count] = f'G1 F{self.speed_print:0.1f}'
-
+        laser_on = False
         for command in self.operations_final:
             if isinstance(command,str):
+                if command == "off":
+                    command = doc.laser_off
+                    laser_on = False
+                elif command == "on":
+                    command = doc.laser_on
+                    laser_on = True
+                elif command == "fast":
+                    command = f'F{doc.speed_position:0.1f}'
+                elif command == "slow":
+                    # Set print speed, using default if needed.
+                    if self.speed_print is None:
+                        command = f'F{doc.speed_print:0.1f}'
+                    else:
+                        command = f'F{self.speed_print:0.1f}'
+
                 # Command already rendered, just capture.
                 doc.AddLine(command)
 
             if isinstance(command,tuple):
                 # Point that needs to be rendered, appying position offset
-                doc.AddLine(f'G1 X{self.x + command[0]:0.3f} Y{self.y + command[1]:0.3f}')
+                gcmd = 'G1'
+                if not laser_on:
+                    gcmd = 'G0'
+
+                doc.AddLine(f'{gcmd} X{self.x + command[0]:0.3f} Y{self.y + command[1]:0.3f} Z0')
 
         # Laser off & return to default power.
         doc.AddLine(doc.laser_off)  # This is likely redundant, but it's safer
@@ -1581,6 +1596,7 @@ class Text(Shape):
 
         points = [
             "(Character: B)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -1626,6 +1642,7 @@ class Text(Shape):
 
         points = [
             "(Character: C)",
+            "fast",
             (0 + xOff, 0),
             "off",
             "fast",
@@ -1662,6 +1679,7 @@ class Text(Shape):
 
         points = [
             "(Character: D)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -1697,6 +1715,7 @@ class Text(Shape):
 
         points = [
             "(Character: E)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -1738,6 +1757,7 @@ class Text(Shape):
 
         points = [
             "(Character: F)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -1815,6 +1835,7 @@ class Text(Shape):
 
         points = [
             "(Character: H)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -1854,6 +1875,7 @@ class Text(Shape):
 
         points = [
             "(Character: I)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -1893,6 +1915,7 @@ class Text(Shape):
 
         points = [
             "(Character: J)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -1929,6 +1952,7 @@ class Text(Shape):
 
         points = [
             "(Character: K)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -1972,6 +1996,7 @@ class Text(Shape):
 
         points = [
             "(Character: L)",
+            "fast",
             (0 + xOff, 9),
             "on",
             "slow",
@@ -2000,6 +2025,7 @@ class Text(Shape):
 
         points = [
             "(Character: M)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -2036,6 +2062,7 @@ class Text(Shape):
 
         points = [
             "(Character: N)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -2065,6 +2092,7 @@ class Text(Shape):
 
         points = [
             "(Character: O)",
+            "fast",
             (0 + xOff, 1),
             "on",
             "slow",
@@ -2099,6 +2127,7 @@ class Text(Shape):
 
         points = [
             "(Character: P)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -2132,6 +2161,7 @@ class Text(Shape):
 
         points = [
             "(Character: Q)",
+            "fast",
             (0 + xOff, 1),
             "on",
             "slow",
@@ -2174,6 +2204,7 @@ class Text(Shape):
 
         points = [
             "(Character: R)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -2217,6 +2248,7 @@ class Text(Shape):
 
         points = [
             "(Character: S)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -2252,6 +2284,7 @@ class Text(Shape):
 
         points = [
             "(Character: T)",
+            "fast",
             (2 + xOff, 0),
             "on",
             "slow",
@@ -2285,6 +2318,7 @@ class Text(Shape):
 
         points = [
             "(Character: U)",
+            "fast",
             (0 + xOff, 9),
             "on",
             "slow",
@@ -2316,6 +2350,7 @@ class Text(Shape):
 
         points = [
             "(Character: V)",
+            "fast",
             (0 + xOff, 9),
             "on",
             "slow",
@@ -2344,6 +2379,7 @@ class Text(Shape):
 
         points = [
             "(Character: W)",
+            "fast",
             (self.offset_x + 0, 9),
             "on",
             "slow",
@@ -2375,6 +2411,7 @@ class Text(Shape):
 
         points = [
             "(Character: X)",
+            "fast",
             (0 + xOff, 0),
             "on",
             "slow",
@@ -2408,6 +2445,7 @@ class Text(Shape):
 
         points = [
             "(Character: Y)",
+            "fast",
             (2 + xOff, 0),
             "on",
             "slow",
@@ -2445,6 +2483,7 @@ class Text(Shape):
 
         points = [
             "(Character: Z)",
+            "fast",
             (0 + xOff, 9),
             "on",
             "slow",
@@ -2481,6 +2520,7 @@ class Text(Shape):
 
         points = [
             "(Character: 1)",
+            "fast",
             (2 + xOff, 0),
             "on",
             "slow",
@@ -2508,6 +2548,7 @@ class Text(Shape):
 
         points = [
             "(Character: 2)",
+            "fast",
             (4 + xOff, 0),
             "on",
             "slow",
@@ -2538,6 +2579,7 @@ class Text(Shape):
 
         points = [
             "(Character: 3)",
+            "fast",
             (0 + xOff, 1),
             "on",
             "slow",
@@ -2578,6 +2620,7 @@ class Text(Shape):
 
         points = [
             "(Character: 4)",
+            "fast",
             (0 + xOff, 9),
             "on",
             "slow",
@@ -2612,6 +2655,7 @@ class Text(Shape):
 
         points = [
             "(Character: 5)",
+            "fast",
             (4 + xOff, 9),
             "on",
             "slow",
@@ -2645,6 +2689,7 @@ class Text(Shape):
 
         points = [
             "(Character: 6)",
+            "fast",
             (4 + xOff, 9),
             "on",
             "slow",
@@ -2679,6 +2724,7 @@ class Text(Shape):
         xOff = self.offset_x
 
         points = [
+            "fast",
             "(Character: 7)",
             (0 + xOff, 0),
             "on",
@@ -2708,6 +2754,7 @@ class Text(Shape):
 
         points = [
             "(Character: 8)",
+            "fast",
             (2 + xOff, 0),
             "on",
             "slow",
@@ -2751,6 +2798,7 @@ class Text(Shape):
 
         points = [
             "(Character: 9)",
+            "fast",
             (4 + xOff, 0),
             "on",
             "slow",
@@ -2783,6 +2831,7 @@ class Text(Shape):
 
         points = [
             "(Character: 0)",
+            "fast",
             (0 + xOff, 1),
             "on",
             "slow",
@@ -2836,6 +2885,7 @@ class Text(Shape):
 
         points = [
             "(Character: %)",
+            "fast",
             (self.offset_x + 0, 7),  # Position for upper circle
             "on",
             "slow",
@@ -2884,6 +2934,7 @@ class Text(Shape):
 
         points = [
             "(Character: +)",
+            "fast",
             (self.offset_x + 0, 5),  # Position for horiz stroke
             "on",
             "slow",
@@ -2916,6 +2967,7 @@ class Text(Shape):
 
         points = [
             "(Character: -)",
+            "fast",
             (self.offset_x + 0, 5),  # Position for horiz stroke
             "on",
             "slow",
@@ -2942,6 +2994,7 @@ class Text(Shape):
 
         points = [
             "(Character: .)",
+            "fast",
             (self.offset_x - 1.5, 0),  # Position for dot
             "on",
             "slow",
