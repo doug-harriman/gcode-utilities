@@ -393,9 +393,9 @@ class GcodeUtils():
             z = float(match.group(3))
 
             v = np.array([x,y,z])
-            print(f'Before: {v}')
+            # print(f'Before: {v}')
             v = np.matmul(rotation,v)
-            print(f'After : {v}')
+            # print(f'After : {v}')
 
             xs = self._to_str(v[0])
             ys = self._to_str(v[1])
