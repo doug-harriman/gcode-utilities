@@ -320,7 +320,7 @@ class ToolPathSlotUniDi(ToolPath):
         # Start spindle
         self.AddLine('; Start Spindle')
         self.AddLine('M3 S5000')  # TODO: Should make this configurable.
-        self.AddLine('G1 P1    ; Wait to spin up')
+        self.AddLine('G4 P1    ; Wait to spin up')
         self.AddLine('')
 
 
@@ -354,15 +354,15 @@ class ToolPathSlotUniDi(ToolPath):
             # Retrace reverse pass
             if z > 0:
                 self.AddLine('; Retrace')
-                self.AddLine(f'G0 Z{self._to_str(self.z_retract)} F{fG0}')
-                self.AddLine(f'G0 X{x0} Y{y0}')
-                self.AddLine(f'G0 Z{self._to_str(-self.z_retract)} F{fG0}')
+                self.AddLine(f'G1 Z{self._to_str(self.z_retract)} F{fG0}')
+                self.AddLine(f'G1 X{x0} Y{y0}')
+                self.AddLine(f'G1 Z{self._to_str(-self.z_retract)}')
                 self.AddLine('')
 
         # Return to original position
         self.AddLine('; Cleanup')
         self.AddLine('M5    ; Stop Spindle')
-        self.AddLine(f'G0 Z{self._to_str(self.depth + self.z_retract)} ; Return Home')
+        self.AddLine(f'G0 Z{self._to_str(self.depth + self.z_retract)} F{fG0}; Return Home')
         self.AddLine(f'G0 X{x0} Y{y0}')
         self.AddLine(f'G0 Z{self._to_str(-self.z_retract)}')
         self.AddLine('M2    ; Job end')
@@ -546,7 +546,7 @@ class ToolPathRectangle(ToolPath):
         # Start spindle
         self.AddLine('; Start Spindle')
         self.AddLine('M3 S5000')  # TODO: parameterize spindle speed
-        self.AddLine('G1 P1    ; Wait to spin up')
+        self.AddLine('G4 P1    ; Wait to spin up')
         self.AddLine()
 
         # Set initial Z position
