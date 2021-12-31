@@ -8,8 +8,8 @@
 # * For paths and patterns that are simpler to specify with code than CAD.
 #
 
-# TODO: Optional job header - In case you want to have mulitple paths in a file
-# TODO: Optional job footer - In case you want to have mulitple paths in a file
+# TODO: Optional job header - In case you want to have multiple paths in a file
+# TODO: Optional job footer - In case you want to have multiple paths in a file
 # TODO: Support units
 
 from enum import Enum, unique
@@ -257,12 +257,12 @@ class ToolPath():
     def GCode(self) -> str:
         '''
         Generates and stores GCode.
-        Abstract method to be overriden by implementation classes.
+        Abstract method to be overridden by implementation classes.
         '''
         self.ParamCheck()
         return self._gcode
 
-class ToolPathRectange(ToolPath):
+class ToolPathRectangle(ToolPath):
     '''
     Tool path geneation for a rectangle.
     '''
@@ -358,7 +358,7 @@ class ToolPathRectange(ToolPath):
             print(f'Warning: limiting plunge distance from ({plunge_dist:0.3f}) to ({perimeter:0.3f})')
             plunge_dist = perimeter
 
-        # Calulate Z height at each corner for the first pass.
+        # Calculate Z height at each corner for the first pass.
         z = np.zeros(lengths.size)
         for idx in range(0,z.size):
             length = lengths[idx]
@@ -461,7 +461,7 @@ if __name__ == '__main__':
 
     # Generate cutout path.
     clearance = 1 
-    tp = ToolPathRectange(x=ext[0]-clearance, y=ext[1]-clearance, 
+    tp = ToolPathRectangle(x=ext[0]-clearance, y=ext[1]-clearance, 
                           width=w+2*clearance, height=h+2*clearance, 
                           operation=Operation.CutOut)
     tp.tool_dia = 3.175
