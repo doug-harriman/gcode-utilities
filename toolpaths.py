@@ -173,7 +173,7 @@ class ToolPath():
         Tool radius.
         Read only. Set via tool diameter.
         '''
-        return self.tool_dia / 2
+        return self._tool_dia / 2
 
     @property
     def gcode(self) -> str:
@@ -235,9 +235,9 @@ class ToolPathSlotUniDi(ToolPath):
     def __init__(self,x:float=0,y:float=1,depth:float=1):
         super().__init__()
 
-        self.x = x
-        self.y = y
-        self.depth = depth
+        self._x = x
+        self._y = y
+        self._depth = depth
 
     @property
     def x(self) -> float:
@@ -288,10 +288,10 @@ class ToolPathSlotUniDi(ToolPath):
         #super().header
 
         # Prerender
-        x0 = self._to_str(-self.x)
-        y0 = self._to_str(-self.y)
-        x1 = self._to_str(self.x)
-        y1 = self._to_str(self.y)
+        x0 = self._to_str(-self._x)
+        y0 = self._to_str(-self._y)
+        x1 = self._to_str(self._x)
+        y1 = self._to_str(self._y)
 
         fG0 = self._to_str(self.speed_position)
         fG1 = self._to_str(self.speed_feed)
@@ -301,8 +301,8 @@ class ToolPathSlotUniDi(ToolPath):
         self.AddLine('; Unidirectional slot cut')
         self.AddLine(f'; X Distance: {x1} [mm]')
         self.AddLine(f'; Y Distance: {y1} [mm]')
-        self.AddLine(f'; Depth     : {self._to_str(self.depth)} [mm]')
-        self.AddLine(f'; Stepdown  : {self._to_str(self.stepdown)} [mm]')
+        self.AddLine(f'; Depth     : {self._to_str(self._depth)} [mm]')
+        self.AddLine(f'; Stepdown  : {self._to_str(self._stepdown)} [mm]')
         self.AddLine('')
 
         self.AddLine(f'; Feed Speed       : {fG1} [mm/min]')
@@ -578,6 +578,176 @@ class ToolPathRectangle(ToolPath):
         # Call parent for footer.
         #super().footer
 
+class ToolPathFace(ToolPath):
+    '''
+    Tool path generator for a facing operation.
+
+    Tool is assumed to start at (0,0,0), with axes:
+    * +X to the right
+    * +Y to the back
+    * +Z up
+
+    Facing operation will move in +X, +Y and -Z.
+
+    '''
+
+    def __init__(self,x:float=0,y:float=1,depth:float=1, stepover:float=0.5, stepdown:float=0.5):
+        super().__init__()
+
+        self._x = x
+        self._y = y
+        self._depth = depth    
+
+    @property
+    def x(self) -> float:
+        '''
+        X-position for tool path geometry.
+        '''
+        return self._x
+
+    @x.setter
+    def x(self,value:float):
+        self._x = value
+
+    @property
+    def y(self) -> float:
+        '''
+        Y-position for tool path geometry.
+        '''
+        return self._y
+
+    @y.setter
+    def y(self,value:float):
+        self._y = value
+
+    @property
+    def depth(self) -> float:
+        '''
+        Depth of cut.
+        '''
+        return self._depth
+
+    @depth.setter
+    def depth(self,value:float):
+
+        if value < 0:
+            value = -value
+
+        self._depth = value
+
+    def GCode(self):
+        '''
+        Generate G-Code for unidirectional cut slot tool path.
+        '''
+
+        # Verify parameters
+        self.ParamCheck()
+
+        # Call parent for header.
+        #super().header
+
+        # Prerender
+        x0 = self._to_str(-self.tool_rad+self.stepover)
+        y0 = self._to_str(-0.75*self.tool_dia)
+        y1 = self._to_str(self.y + 0.75*self.tool_dia)
+
+        fG0 = self._to_str(self.speed_position)
+        fG1 = self._to_str(self.speed_feed)
+
+        # Header
+        self.AddLine( '; ---- Job Description ----')
+        self.AddLine( '; Facing operation')
+        self.AddLine( '; Cuts performed bi-directionally in Y')
+        self.AddLine( '; Stepover performed in X.')
+        self.AddLine(f'; Facing X Distance: {self.x} [mm]')
+        self.AddLine(f'; Facing Y Distance: {self.y} [mm]')
+        self.AddLine(f'; Depth     : {self._to_str(self.depth)} [mm]')
+        self.AddLine(f'; Stepover  : {self._to_str(self.stepover)} [mm]')
+        self.AddLine(f'; Stepdown  : {self._to_str(self.stepdown)} [mm]')
+        self.AddLine(f'; Tool Dia  : {self._to_str(self.tool_dia)} [mm]')
+        self.AddLine('')
+
+        self.AddLine(f'; Feed Speed       : {fG1} [mm/min]')
+        self.AddLine(f'; Positioning Speed: {fG0} [mm/min]')
+        self.AddLine('')
+
+        self.AddLine('; ---- Setup ----')
+        self.AddLine('G21 ; Units: mm')
+        self.AddLine('G94 ; Speed in units per minute')
+        self.AddLine('G17 ; XY Plane')
+        self.AddLine('G54 ; Coordinate system 1')
+        self.AddLine('G90 ; ABS positioning mode')
+        self.AddLine('')
+
+        # Position for first cutting pass.
+        self.AddLine( '; ---- Pre-Position ----')
+        self.AddLine(f'G0 Z{self._to_str(self.z_retract)} F{fG0}')
+        self.AddLine(f'G0 X{x0} Y{y0}')
+        self.AddLine('')
+
+        # Start spindle
+        self.AddLine('; Start Spindle')
+        self.AddLine('M3 S5000')  # TODO: Should make this configurable.
+        self.AddLine('G4 P1    ; Wait to spin up')
+        self.AddLine('')
+
+
+        cnt_levels = math.ceil(self.depth / self.stepdown)
+        cur_level  = 0
+
+        # Loop
+        z = 0
+        stepdown = self.stepdown
+        while(z > -self.depth):  
+            # Calc next z cut position
+            z -= stepdown
+
+            # Do short stepdown if needed to get to bottom.
+            # If already at zero, we're done.
+            if z < -self.depth:
+                z = -self.depth
+
+            # Move down to cut position
+            # NOTE: Assumes starting off of workpiece.  No 
+            cur_level += 1
+            self.AddLine(f'; ---- Facing Pass {cur_level}/{cnt_levels} ----')
+            self.AddLine('; Cut')
+            self.AddLine(f'G0 Z{self._to_str(z)} F{fG0}')
+
+            # Loop on cuts
+            x = -self.tool_rad+self.stepover
+            while x <= self.x:
+
+                # Cut pass forward
+                self.AddLine(f'G1 Y{y1} F{fG1}  ; cut fwd')
+
+                x += self.stepover
+                if x <= self.x + self.stepover:
+                    # Cut pass back
+                    self.AddLine(f'G0 X{self._to_str(x)} F{fG0} ; stepover')
+                    self.AddLine(f'G1 Y{y0} F{fG1} ; cut rev')
+
+                x += self.stepover
+                if x <= self.x:
+                    self.AddLine(f'G0 X{self._to_str(x)} F{fG0} ; stepover')
+
+            self.AddLine('')
+
+            # Retrace to first cut pass
+            if z > -self.depth:
+                self.AddLine( '; Retrace')
+                self.AddLine(f'G1 Z{self._to_str(self.z_retract)} F{fG0}')
+                self.AddLine(f'G1 X{x0} Y{y0}')
+                self.AddLine('')
+
+        # Return to original position
+        self.AddLine( '; Cleanup')
+        self.AddLine( 'M5    ; Stop Spindle')
+        self.AddLine(f'G0 Z{self._to_str(self.z_retract)} F{fG0} ; Retract')
+        self.AddLine(f'G0 X0 Y0 ; Return Home')
+        self.AddLine( 'M2    ; Job end')
+        self.AddLine('')
+
 if __name__ == '__main__':
 
     # # Generate cutout path.
@@ -595,10 +765,21 @@ if __name__ == '__main__':
     # tp.Save('rectangle-test.nc')
 
     # Slot tool path
-    tp = ToolPathSlotUniDi(y=50, depth=5)
+    # tp = ToolPathSlotUniDi(y=50, depth=5)
+    # tp.speed_position = 1500
+    # tp.speed_feed     = 1000
+    # tp.stepdown       = 2
+    # tp.z_retract      = 0.5
+    # tp.GCode()
+    # tp.Save('vertical-slot.nc')
+
+    # Facing
+    tp = ToolPathFace(x=107,y=82,depth=0.7)
     tp.speed_position = 1500
-    tp.speed_feed     = 1000
-    tp.stepdown       = 2
-    tp.z_retract      = 0.5
+    tp.speed_feed     = 500
+    tp.stepdown       = 0.5
+    tp.tool_dia       = 0.25*25.4
+    tp.stepover       = tp.tool_dia * 0.40
+    tp.z_retract      = 2
     tp.GCode()
-    tp.Save('vertical-slot.nc')
+    tp.Save('face.nc')
