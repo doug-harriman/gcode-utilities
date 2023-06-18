@@ -1031,6 +1031,23 @@ class ToolPathFace(ToolPath):
         self.AddLine( 'M2    ; Job end')
         self.AddLine('')
 
+def AppendFiles(fn1:str, fn2:str):
+    """
+    Appends one file onto another.
+    Output file is fn1.
+
+    Args:
+        fn1 (str): First file name.
+        fn2 (str): Second file name.
+    """
+    
+    with open(fn2,'r') as fp:
+        data = fp.read()
+    
+    with open(fn1,'w') as fp:
+        fp.write(data)
+        
+
 if __name__ == '__main__':
 
     # # Generate cutout path.
@@ -1067,32 +1084,31 @@ if __name__ == '__main__':
     # tp.GCode()
     # tp.Save(f'face-x{tp.x}mm-y{tp.y}mm-z{tp.depth}mm.nc')
 
-    diameter=0.25*25.4
-    x = diameter/2 + 2
-    y = x
+    # Test cylinder
+    if False:
+        diameter=0.25*25.4
+        x = diameter/2 + 2
+        y = x
 
-    tp = ToolPathCylinder(x=x,y=y)
-    tp.diameter = diameter
-    tp.z_top = 0
-    tp.z_bottom = tp.z_top - 17.25 + 0.1
-    tp.speed_position = 1500
-    tp.speed_feed     = 600
-    tp.stepdown       = 0.5
-    tp.tool_dia       = 3.175
-    # tp.stepover       = tp.tool_dia * 0.40
-    tp.z_retract      = 2
+        tp = ToolPathCylinder(x=x,y=y)
+        tp.diameter = diameter
+        tp.speed_position = 1500
+        tp.speed_feed     = 600
+        tp.stepdown       = 0.5
+        tp.tool_dia       = 3.175
+        tp.z_retract      = 2
 
-    # Tests
-    tp.stepdown=5
-    tp.z_top = 0
-    tp.z_bottom = tp.z_top - 2.5*tp.stepdown
+        # Tests
+        tp.stepdown=5
+        tp.z_top = 0
+        tp.z_bottom = tp.z_top - 2.5*tp.stepdown
 
-    from pprint import pprint
-    pprint(vars(tp))
+        from pprint import pprint
+        pprint(vars(tp))
 
-    tp.GCode()
-    fn = f'cylinder-x{tp.x}mm-y{tp.y}mm-rad{tp.radius}mm-z{tp.z_top-tp.z_bottom}mm.nc'
-    tp.Save(fn)
-    print(f"Saved: {fn}")
+        tp.GCode()
+        fn = f'cylinder-x{tp.x}mm-y{tp.y}mm-rad{tp.radius}mm-z{tp.z_top-tp.z_bottom}mm.nc'
+        tp.Save(fn)
+        print(f"Saved: {fn}")
     
     
