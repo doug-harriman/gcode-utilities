@@ -8,10 +8,10 @@
 # * For paths and patterns that are simpler to specify with code than CAD.
 #
 
-# TODO: Add slotting
 # TODO: Make everything relative.  See G-Codes in CNCjs macro for 3-axis tool homing.
+# TODO: Z-retract should be relative to Z-top
 # TODO: Support units
-# TODO: CLI
+# TODO: CLI.  Use click.
 # TODO: JSON config?
 
 import numpy as np
@@ -578,6 +578,223 @@ class ToolPathRectangle(ToolPath):
         # Call parent for footer.
         #super().footer
 
+class ToolPathCylinder(ToolPath):
+    '''
+    Tool path geneation for a cylinder.
+    '''
+
+    _x = 0.0
+    _y = 0.0
+
+    _radius  = 3.0
+
+    def __init__(self,x:float=0,y:float=0,
+                 radius:float=3,
+                 bore:bool=False,
+                 segments:int=30):
+        super().__init__()
+
+        # Use setters for validation
+        self.x = x
+        self.y = y
+        self.radius  = radius
+        self.bore = bore
+        self.segments = segments
+
+    @property
+    def x(self) -> float:
+        '''
+        X-position of cylinder center.
+        '''
+        return self._x
+
+    @x.setter
+    def x(self,value:float):
+        self._x = value
+
+    @property
+    def y(self) -> float:
+        '''
+        Y-position of cylinder center.
+        '''
+        return self._y
+
+    @y.setter
+    def y(self,value:float):
+        self._y = value
+
+    @property
+    def radius(self) -> float:
+        '''
+        Radius of cylinder.
+        '''
+        return self._radius
+
+    @radius.setter
+    def radius(self,value:float):
+        if value < 0:
+            value = -value
+        self._radius = value
+
+    @property
+    def diameter(self) -> float:
+        '''
+        Diameter of cylinder.
+        '''
+        return 2*self._radius
+
+    @diameter.setter
+    def diameter(self,value:float):
+        if value < 0:
+            value = -value
+        self._radius = value/2
+
+    @property
+    def bore(self) -> bool:
+        """
+        Is cylinder a bore.
+        """
+        
+        return self._bore
+
+    @bore.setter
+    def bore(self,value:bool):
+        
+        self._bore = value
+    
+    @property
+    def segments(self) -> int:
+        """
+        Number of segments with which to approximate circle.
+
+        Returns:
+            int: Segment count
+        """
+        return self._segments
+   
+    @segments.setter
+    def segments(self,value:int):
+        
+        value = round(value) # enforce int
+        self._segments = value
+    
+    def GCode(self):
+        '''
+        Generate G-Code for cutting out a cylinder.
+        '''
+
+        # TODO: Allow 2 pass with a step in/out depending on bore.
+
+        # Verify parameters
+        self.ParamCheck()
+
+        # Call parent for header.
+        #super().header
+
+        # G-Code arc commands:
+        # G2 - Clockwise arc
+        # G3 - Counter-clockwise arc
+        # 
+        # Unfortunatly, the helical arc commands are not supported by Grbl.
+        # Implement as series of XY moves with Z plunge.
+        
+        # Determine total number of passes
+        n_passes = (self.z_top - self.z_bottom) / self.stepdown
+        n_passes = int(np.ceil(n_passes))
+
+        # Add in an additional pass at the bottom to make sure we get full final depth
+        n_passes += 1 
+
+        # Pre conversions
+        z_retract      = self._to_str(self.z_retract)
+        speed_position = self._to_str(self._speed_position)
+        speed_feed     = self._to_str(self._speed_feed)
+
+        # Position of helix start
+        r = self._radius
+        if self._bore:
+            r -= self.tool_rad - self.stepover
+        else:
+            r += self.tool_rad - self.stepover
+            
+        angles = np.linspace(0,2*np.pi,self.segments+1)
+        x = r * np.cos(angles) + self.x
+        y = r * np.sin(angles) + self.y
+        z = np.linspace(self.z_top,self.z_top - self.stepdown, self.segments+1)
+
+        # Information
+        # TODO: Update when units supported
+        if self._bore:
+            self.AddLine( '; Bore:')
+        else:
+            self.AddLine( '; Cyinder:')
+        self.AddLine(f';  center  : x:{self._to_str(self.x)}, y:{self._to_str(self.y)}')
+        self.AddLine(f';  radius  : {self._to_str(self.radius)}')
+        self.AddLine(f';  z top   : {self._to_str(self.z_top)}')
+        self.AddLine(f';  z bottom: {self._to_str(self.z_bottom)}')
+        self.AddLine(f';  DOC     : {self._to_str(self.stepdown)}')
+        self.AddLine(f';  passes  : {self._to_str(n_passes)}')
+        self.AddLine(f';  tool dia: {self._to_str(self.tool_dia)}')
+        self.AddLine()
+
+        # TODO: Move this to base class header.
+        # Header
+        self.AddLine('G21 ; Units: mm')
+        self.AddLine('G94 ; Speed in units per minute')
+        self.AddLine('G17 ; XY Plane')
+        self.AddLine('G54 ; Coordinate system 1')
+        self.AddLine('G90 ; ABS positioning mode')
+        self.AddLine()
+
+        # Go to starting position
+        self.AddLine('; Position for start')
+        self.AddLine(f'G0 Z{z_retract} F{speed_position}')
+        self.AddLine(f'G0 X{self._to_str(x[0])} Y{self._to_str(y[0])}')
+        self.AddLine()
+
+        # Start spindle (or laser?)
+        # Start spindle
+        self.AddLine('; Start Spindle')
+        self.AddLine('M3 S5000')  # TODO: parameterize spindle speed
+        self.AddLine('G4 P1    ; Wait to spin up')
+        self.AddLine()
+
+        # Set initial Z position
+        self.AddLine('; Move to start position')
+        self.AddLine(f'G1 Z{self._to_str(self.z_top)} F{speed_feed}')
+
+        for i_pass in range(0,n_passes):
+            self.AddLine()
+            self.AddLine(f'; Pass {i_pass+1}')
+
+            for idx in range(0,len(x)-1):
+                x_str = self._to_str(x[idx])
+                y_str = self._to_str(y[idx])
+                z_str = self._to_str(z[idx])
+                
+                self.AddLine(f'G1 X{x_str} Y{y_str} Z{z_str}')
+
+            # Step down
+            z -= self.stepdown
+
+            # Cap at bottom
+            z[z<self.z_bottom] = self.z_bottom
+            
+        # Add in very last point
+        s = f'G1 X{self._to_str(x[-1])} Y{self._to_str(y[-1])} '
+        s += f'Z{self._to_str(z[-1])}' 
+        self.AddLine(s)
+
+        # Retract
+        self.AddLine()
+        self.AddLine('; Retract')
+        self.AddLine(f'G0 Z{z_retract} F{speed_position}')
+        self.AddLine(f'G0 X0 Y0')
+        
+
+        # Call parent for footer.
+        #super().footer
+
 class ToolPathFace(ToolPath):
     '''
     Tool path generator for a facing operation.
@@ -655,6 +872,8 @@ class ToolPathFace(ToolPath):
         fG1 = self._to_str(self.speed_feed)
 
         # Header
+        self.AddLine(f'; Code Generated by: {__file__}')
+        self.AddLine('')
         self.AddLine( '; ---- Job Description ----')
         self.AddLine( '; Facing operation')
         self.AddLine( '; Cuts performed bi-directionally in Y')
@@ -774,12 +993,37 @@ if __name__ == '__main__':
     # tp.Save('vertical-slot.nc')
 
     # Facing
-    tp = ToolPathFace(x=107,y=82,depth=0.7)
+    # tp = ToolPathFace(x=180,y=120,depth=2)
+    # tp.speed_position = 1500
+    # tp.speed_feed     = 1000
+    # tp.stepdown       = 0.5
+    # tp.tool_dia       = 3.175
+    # tp.stepover       = tp.tool_dia * 0.40
+    # tp.z_retract      = 2
+    # tp.GCode()
+    # tp.Save(f'face-x{tp.x}mm-y{tp.y}mm-z{tp.depth}mm.nc')
+
+    diameter=0.25*25.4
+    x = diameter/2 + 2
+    y = x
+
+    tp = ToolPathCylinder(x=x,y=y)
+    tp.diameter = diameter
+    tp.z_top = 0
+    tp.z_bottom = tp.z_top - 17.25 + 0.1
     tp.speed_position = 1500
-    tp.speed_feed     = 500
+    tp.speed_feed     = 600
     tp.stepdown       = 0.5
-    tp.tool_dia       = 0.25*25.4
+    tp.tool_dia       = 3.175
     tp.stepover       = tp.tool_dia * 0.40
     tp.z_retract      = 2
+
+    from pprint import pprint
+    pprint(vars(tp))
+
     tp.GCode()
-    tp.Save('face.nc')
+    fn = f'cylinder-x{tp.x}mm-y{tp.y}mm-rad{tp.radius}mm-z{tp.z_top-tp.z_bottom}mm.nc'
+    tp.Save(fn)
+    print(f"Saved: {fn}")
+    
+    
