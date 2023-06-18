@@ -24,7 +24,7 @@ class ToolPath():
     _speed_feed     = 300
     _speed_position = 1500
 
-    _stepover = 0.5
+    _stepover = 0 # Default to no stepover.
     _tool_dia = 3.175
 
     _z_top     =  0.0
@@ -200,6 +200,30 @@ class ToolPath():
         Adds a line to the document.
         '''
         self._gcode += line + self.EOL
+
+    def XYZ_string(self,x:float=None,y:float=None,z:float=None) -> str:
+        """
+        Utility function to convert X, Y, and Z values to a string.
+        If a value is not passed, it is not rendered.
+
+        Args:
+            x (float): X-coordinate, optional.
+            y (float): Y-coordinate, optional.
+            z (float): Z-coordinate, optional.
+
+        Returns:
+            str: Formatted string ready for G-Code.
+        """
+        
+        s = ''
+        if x is not None:
+            s += f'X{self._to_str(x)} '
+        if y is not None:
+            s += f'Y{self._to_str(y)} '
+        if z is not None:
+            s += f'Z{self._to_str(z)} '
+            
+        return s.strip()
 
     def Save(self,filename:str):
         '''
@@ -699,11 +723,13 @@ class ToolPathCylinder(ToolPath):
         # Implement as series of XY moves with Z plunge.
         
         # Determine total number of passes
-        n_passes = (self.z_top - self.z_bottom) / self.stepdown
-        n_passes = int(np.ceil(n_passes))
+        n_passes_float = (self.z_top - self.z_bottom) / self.stepdown
+        n_passes = int(np.ceil(n_passes_float))
 
         # Add in an additional pass at the bottom to make sure we get full final depth
-        n_passes += 1 
+        # Unless we have integer number of stepdowns.
+        if n_passes != n_passes_float and self.stepover == 0:
+            n_passes += 1 
 
         # Pre conversions
         z_retract      = self._to_str(self.z_retract)
@@ -711,16 +737,28 @@ class ToolPathCylinder(ToolPath):
         speed_feed     = self._to_str(self._speed_feed)
 
         # Position of helix start
-        r = self._radius
+        r_helix = self._radius
         if self._bore:
-            r -= self.tool_rad - self.stepover
+            r_helix -= self.tool_rad + self.stepover
         else:
-            r += self.tool_rad - self.stepover
+            r_helix += self.tool_rad + self.stepover
             
+        # Helix points for one pass
         angles = np.linspace(0,2*np.pi,self.segments+1)
-        x = r * np.cos(angles) + self.x
-        y = r * np.sin(angles) + self.y
-        z = np.linspace(self.z_top,self.z_top - self.stepdown, self.segments+1)
+        x_helix = r_helix * np.cos(angles) + self.x
+        y_helix = r_helix * np.sin(angles) + self.y
+        z_helix = np.linspace(self.z_top,self.z_top - self.stepdown, self.segments+1)
+        
+        # Radius of finishing cut
+        r_finish = self._radius
+        if self._bore:
+            r_finish -= self.tool_rad
+        else:
+            r_finish += self.tool_rad
+        
+        # Finishing cut points
+        x_finish = r_finish * np.cos(angles) + self.x
+        y_finish = r_finish * np.sin(angles) + self.y
 
         # Information
         # TODO: Update when units supported
@@ -735,6 +773,8 @@ class ToolPathCylinder(ToolPath):
         self.AddLine(f';  DOC     : {self._to_str(self.stepdown)}')
         self.AddLine(f';  passes  : {self._to_str(n_passes)}')
         self.AddLine(f';  tool dia: {self._to_str(self.tool_dia)}')
+        if self.stepover > 0:
+            self.AddLine(f';  stepover: {self._to_str(self.stepover)} for finishing cut')
         self.AddLine()
 
         # TODO: Move this to base class header.
@@ -749,7 +789,7 @@ class ToolPathCylinder(ToolPath):
         # Go to starting position
         self.AddLine('; Position for start')
         self.AddLine(f'G0 Z{z_retract} F{speed_position}')
-        self.AddLine(f'G0 X{self._to_str(x[0])} Y{self._to_str(y[0])}')
+        self.AddLine(f'G0 X{self._to_str(x_helix[0])} Y{self._to_str(y_helix[0])}')
         self.AddLine()
 
         # Start spindle (or laser?)
@@ -767,23 +807,48 @@ class ToolPathCylinder(ToolPath):
             self.AddLine()
             self.AddLine(f'; Pass {i_pass+1}')
 
-            for idx in range(0,len(x)-1):
-                x_str = self._to_str(x[idx])
-                y_str = self._to_str(y[idx])
-                z_str = self._to_str(z[idx])
+            # Helix cut
+            for idx in range(0,len(x_helix)-1):
+                coords = self.XYZ_string(x=x_helix[idx],
+                                         y=y_helix[idx],
+                                         z=z_helix[idx])
+                self.AddLine(f'G1 {coords}')
+
+            # Finishing cut.
+            if self.stepover > 0:
+                # Move to last point in helix
+                idx = -1
+                coords = self.XYZ_string(x=x_helix[idx],
+                                         y=y_helix[idx],
+                                         z=z_helix[idx])
+                self.AddLine(f'G1 {coords}')
                 
-                self.AddLine(f'G1 X{x_str} Y{y_str} Z{z_str}')
+                # Now finish out the helix circle.
+                self.AddLine()
+                self.AddLine(f'; Finishing Rough, Pass {i_pass+1}')
+                for idx in range(0,len(x_helix)):
+                    coords = self.XYZ_string(x=x_helix[idx],  
+                                             y=y_helix[idx])
+                    self.AddLine(f'G1 {coords}')
+                
+                # Circular finishing cut
+                self.AddLine()
+                self.AddLine(f'; Finishing Cut, Pass {i_pass+1}')
+                for idx in range(0,len(x_helix)):
+                    coords = self.XYZ_string(x=x_finish[idx],  
+                                             y=y_finish[idx])
+                    self.AddLine(f'G1 {coords}')
 
             # Step down
-            z -= self.stepdown
+            z_helix -= self.stepdown
 
             # Cap at bottom
-            z[z<self.z_bottom] = self.z_bottom
+            z_helix[z_helix<self.z_bottom] = self.z_bottom
             
         # Add in very last point
-        s = f'G1 X{self._to_str(x[-1])} Y{self._to_str(y[-1])} '
-        s += f'Z{self._to_str(z[-1])}' 
-        self.AddLine(s)
+        idx = -1
+        coords = self.XYZ_string(x=x_helix[idx],y=y_helix[idx],z=z_helix[idx])
+        self.AddLine(f'G1 {coords}')
 
         # Retract
         self.AddLine()
@@ -791,7 +856,6 @@ class ToolPathCylinder(ToolPath):
         self.AddLine(f'G0 Z{z_retract} F{speed_position}')
         self.AddLine(f'G0 X0 Y0')
         
-
         # Call parent for footer.
         #super().footer
 
@@ -1015,8 +1079,13 @@ if __name__ == '__main__':
     tp.speed_feed     = 600
     tp.stepdown       = 0.5
     tp.tool_dia       = 3.175
-    tp.stepover       = tp.tool_dia * 0.40
+    # tp.stepover       = tp.tool_dia * 0.40
     tp.z_retract      = 2
+
+    # Tests
+    tp.stepdown=5
+    tp.z_top = 0
+    tp.z_bottom = tp.z_top - 2.5*tp.stepdown
 
     from pprint import pprint
     pprint(vars(tp))
