@@ -29,7 +29,7 @@ class ToolPath():
 
     _z_top     =  0.0
     _z_bottom  = -3.0
-    _z_retract =  3.0
+    _z_retract_dist =  3.0
     _stepdown  = 0.25  
 
     _gcode = ''  # Generated G-Code
@@ -46,19 +46,19 @@ class ToolPath():
 
         # Heights
         if self.z_top < self.z_bottom:
-            raise ValueError(f"Top height ({self.z_top:03.f}) < bottom height ({self.z_bottom:03.f})")
+            raise ValueError(f"Top height ({self.z_top:0.3f}) < bottom height ({self.z_bottom:0.3f})")
 
-        if self.z_retract < self.z_top + self.RETRACT_MIN:
-            self.z_retract = self.z_top + self.RETRACT_MIN
-            print(f'Warning: retract height adjusted to: {self.z_retract:03.f}')
+        if self.z_retract_dist <  self.RETRACT_MIN:
+            self.z_retract_dist = self.RETRACT_MIN
+            print(f'Warning: retract height adjusted to: {self.z_retract_dist:0.3f}')
 
         if self.stepdown > self.z_top - self.z_bottom:
             self.stepdown = self.z_top - self.z_bottom
-            print(f'Warning: Z step was greater than total height, adjusted to: {self.stepdown:03.f}')
+            print(f'Warning: Z step was greater than total height, adjusted to: {self.stepdown:0.3f}')
 
         # Cutting
         if self.tool_dia < self.stepover:
-            raise ValueError(f"Tool diameter ({self.tool_dia:03.f}) is smaller than stepover ({self.stepover:03.f})")
+            raise ValueError(f"Tool diameter ({self.tool_dia:0.3f}) is smaller than stepover ({self.stepover:0.3f})")
 
     @property
     def z_top(self) -> float:
@@ -85,17 +85,25 @@ class ToolPath():
         self._z_bottom = value        
 
     @property
-    def z_retract(self) -> float:
+    def z_retract_dist(self) -> float:
         '''
-        Rectraction height Z position.
+        Rectraction Z distance relative to z_top.
         The value should be high enough such that tool tip clears work piece
         and other tooling.  Tool should be clear for any XY motion.
         '''
-        return self._z_retract
+        return self._z_retract_dist
 
-    @z_retract.setter
-    def z_retract(self,value:float):
-        self._z_retract = value        
+    @z_retract_dist.setter
+    def z_retract_dist(self,value:float):
+
+        if value < 0:
+            value = -value
+        
+        self._z_retract_dist = value        
+
+    @property
+    def z_retract_abs(self) -> float:
+        return self.z_top + self.z_retract_dist
     
     @property
     def stepdown(self) -> float:
@@ -307,6 +315,7 @@ class ToolPathSlotUniDi(ToolPath):
 
         # Verify parameters
         self.ParamCheck()
+        self._gcode = ''  # Reset G-Code
 
         # Call parent for header.
         #super().header
@@ -378,17 +387,16 @@ class ToolPathSlotUniDi(ToolPath):
             # Retrace reverse pass
             if z > 0:
                 self.AddLine('; Retrace')
-                self.AddLine(f'G1 Z{self._to_str(self.z_retract)} F{fG0}')
+                self.AddLine(f'G1 Z{self._to_str(self.z_retract_abs)} F{fG0}')
                 self.AddLine(f'G1 X{x0} Y{y0}')
-                self.AddLine(f'G1 Z{self._to_str(-self.z_retract)}')
+                self.AddLine(f'G1 Z{self._to_str(-self.z_retract_abs)}')
                 self.AddLine('')
 
         # Return to original position
         self.AddLine('; Cleanup')
         self.AddLine('M5    ; Stop Spindle')
-        self.AddLine(f'G0 Z{self._to_str(self.depth + self.z_retract)} F{fG0}; Return Home')
+        self.AddLine(f'G0 Z{self._to_str(self.z_retract_abs)} F{fG0}; Return Home')
         self.AddLine(f'G0 X{x0} Y{y0}')
-        self.AddLine(f'G0 Z{self._to_str(-self.z_retract)}')
         self.AddLine('M2    ; Job end')
         self.AddLine('')
 
@@ -466,6 +474,7 @@ class ToolPathRectangle(ToolPath):
 
         # Verify parameters
         self.ParamCheck()
+        self._gcode = ''  # Reset G-Code
 
         # Call parent for header.
         #super().header
@@ -534,7 +543,7 @@ class ToolPathRectangle(ToolPath):
         n_passes += 1 
 
         # Pre conversions
-        z_retract      = self._to_str(self.z_retract)
+        z_retract_abs  = self._to_str(self.z_retract_abs)
         speed_position = self._to_str(self._speed_position)
         speed_feed     = self._to_str(self._speed_feed)
 
@@ -562,7 +571,7 @@ class ToolPathRectangle(ToolPath):
 
         # Go to starting position
         self.AddLine('; Position for start')
-        self.AddLine(f'G0 Z{z_retract} F{speed_position}')
+        self.AddLine(f'G0 Z{z_retract_abs} F{speed_position}')
         self.AddLine(f'G0 X{self._to_str(pos_start[0])} Y{self._to_str(pos_start[1])}')
         self.AddLine()
 
@@ -597,15 +606,18 @@ class ToolPathRectangle(ToolPath):
         # Retract
         self.AddLine()
         self.AddLine('; Retract')
-        self.AddLine(f'G0 Z{z_retract} F{speed_position}')
+        self.AddLine(f'G0 Z{z_retract_abs} F{speed_position}')
 
         # Call parent for footer.
         #super().footer
 
 class ToolPathCylinder(ToolPath):
-    '''
-    Tool path geneation for a cylinder.
-    '''
+    """
+    Cylindrical cut toolpath.
+    
+    Set bore to True to cut a bore.
+
+    """
 
     _x = 0.0
     _y = 0.0
@@ -711,6 +723,7 @@ class ToolPathCylinder(ToolPath):
 
         # Verify parameters
         self.ParamCheck()
+        self._gcode = ''  # Reset G-Code
 
         # Call parent for header.
         #super().header
@@ -732,7 +745,7 @@ class ToolPathCylinder(ToolPath):
             n_passes += 1 
 
         # Pre conversions
-        z_retract      = self._to_str(self.z_retract)
+        z_retract_abs  = self._to_str(self.z_retract_abs)
         speed_position = self._to_str(self._speed_position)
         speed_feed     = self._to_str(self._speed_feed)
 
@@ -788,7 +801,7 @@ class ToolPathCylinder(ToolPath):
 
         # Go to starting position
         self.AddLine('; Position for start')
-        self.AddLine(f'G0 Z{z_retract} F{speed_position}')
+        self.AddLine(f'G0 Z{z_retract_abs} F{speed_position}')
         self.AddLine(f'G0 X{self._to_str(x_helix[0])} Y{self._to_str(y_helix[0])}')
         self.AddLine()
 
@@ -853,7 +866,7 @@ class ToolPathCylinder(ToolPath):
         # Retract
         self.AddLine()
         self.AddLine('; Retract')
-        self.AddLine(f'G0 Z{z_retract} F{speed_position}')
+        self.AddLine(f'G0 Z{z_retract_abs} F{speed_position}')
         self.AddLine(f'G0 X0 Y0')
         
         # Call parent for footer.
@@ -863,21 +876,21 @@ class ToolPathFace(ToolPath):
     '''
     Tool path generator for a facing operation.
 
-    Tool is assumed to start at (0,0,0), with axes:
-    * +X to the right
-    * +Y to the back
-    * +Z up
+    Tool cuts in a plane from (0,0) to (x,y).
+    Tool cuts in Y and steps in X.
+    Tool cuts from z_top to z_bottom in stepdown increments.
 
     Facing operation will move in +X, +Y and -Z.
 
     '''
 
-    def __init__(self,x:float=0,y:float=1,depth:float=1, stepover:float=0.5, stepdown:float=0.5):
+    # TODO: Cutting pass should be the long pass for slightly faster cutting.
+
+    def __init__(self,x:float=0,y:float=1):
         super().__init__()
 
-        self._x = x
-        self._y = y
-        self._depth = depth    
+        self.x = x
+        self.y = y
 
     @property
     def x(self) -> float:
@@ -901,21 +914,6 @@ class ToolPathFace(ToolPath):
     def y(self,value:float):
         self._y = value
 
-    @property
-    def depth(self) -> float:
-        '''
-        Depth of cut.
-        '''
-        return self._depth
-
-    @depth.setter
-    def depth(self,value:float):
-
-        if value < 0:
-            value = -value
-
-        self._depth = value
-
     def GCode(self):
         '''
         Generate G-Code for unidirectional cut slot tool path.
@@ -923,6 +921,7 @@ class ToolPathFace(ToolPath):
 
         # Verify parameters
         self.ParamCheck()
+        self._gcode = ''  # Reset G-Code
 
         # Call parent for header.
         #super().header
@@ -942,9 +941,10 @@ class ToolPathFace(ToolPath):
         self.AddLine( '; Facing operation')
         self.AddLine( '; Cuts performed bi-directionally in Y')
         self.AddLine( '; Stepover performed in X.')
-        self.AddLine(f'; Facing X Distance: {self.x} [mm]')
-        self.AddLine(f'; Facing Y Distance: {self.y} [mm]')
-        self.AddLine(f'; Depth     : {self._to_str(self.depth)} [mm]')
+        self.AddLine(f'; Facing X Distance: {self._to_str(self.x)} [mm]')
+        self.AddLine(f'; Facing Y Distance: {self._to_str(self.y)} [mm]')
+        self.AddLine(f'; Z_top     : {self._to_str(self.z_top)} [mm]')
+        self.AddLine(f'; Z_bottom  : {self._to_str(self.z_bottom)} [mm]')
         self.AddLine(f'; Stepover  : {self._to_str(self.stepover)} [mm]')
         self.AddLine(f'; Stepdown  : {self._to_str(self.stepdown)} [mm]')
         self.AddLine(f'; Tool Dia  : {self._to_str(self.tool_dia)} [mm]')
@@ -964,7 +964,7 @@ class ToolPathFace(ToolPath):
 
         # Position for first cutting pass.
         self.AddLine( '; ---- Pre-Position ----')
-        self.AddLine(f'G0 Z{self._to_str(self.z_retract)} F{fG0}')
+        self.AddLine(f'G0 Z{self._to_str(self.z_retract_abs)} F{fG0}')
         self.AddLine(f'G0 X{x0} Y{y0}')
         self.AddLine('')
 
@@ -975,20 +975,19 @@ class ToolPathFace(ToolPath):
         self.AddLine('')
 
 
-        cnt_levels = math.ceil(self.depth / self.stepdown)
+        cnt_levels = math.ceil((self.z_top-self.z_bottom) / self.stepdown)
         cur_level  = 0
 
         # Loop
-        z = 0
-        stepdown = self.stepdown
-        while(z > -self.depth):  
+        z = self.z_top
+        while(z > self.z_bottom):  
             # Calc next z cut position
-            z -= stepdown
+            z -= self.stepdown
 
             # Do short stepdown if needed to get to bottom.
             # If already at zero, we're done.
-            if z < -self.depth:
-                z = -self.depth
+            if z < self.z_bottom:
+                z = self.z_bottom
 
             # Move down to cut position
             # NOTE: Assumes starting off of workpiece.  No 
@@ -1017,16 +1016,16 @@ class ToolPathFace(ToolPath):
             self.AddLine('')
 
             # Retrace to first cut pass
-            if z > -self.depth:
+            if z > self.z_bottom:
                 self.AddLine( '; Retrace')
-                self.AddLine(f'G1 Z{self._to_str(self.z_retract)} F{fG0}')
+                self.AddLine(f'G1 Z{self._to_str(self.z_retract_abs)} F{fG0}')
                 self.AddLine(f'G1 X{x0} Y{y0}')
                 self.AddLine('')
 
         # Return to original position
         self.AddLine( '; Cleanup')
         self.AddLine( 'M5    ; Stop Spindle')
-        self.AddLine(f'G0 Z{self._to_str(self.z_retract)} F{fG0} ; Retract')
+        self.AddLine(f'G0 Z{self._to_str(self.z_retract_abs)} F{fG0} ; Retract')
         self.AddLine(f'G0 X0 Y0 ; Return Home')
         self.AddLine( 'M2    ; Job end')
         self.AddLine('')
@@ -1044,7 +1043,7 @@ def AppendFiles(fn1:str, fn2:str):
     with open(fn2,'r') as fp:
         data = fp.read()
     
-    with open(fn1,'w') as fp:
+    with open(fn1,'a') as fp:
         fp.write(data)
         
 
