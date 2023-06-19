@@ -14,6 +14,8 @@ TOOL_DIA = 3.175
 
 # Workpiece
 WORKPIECE_HEIGHT = 20
+WORKPIECE_X_LEN = 28
+WORKPIECE_Y_LEN = 28
 
 # Speeds & feeds
 FEED_RATE = 500
@@ -38,9 +40,7 @@ if WORKPIECE_HEIGHT > HEIGHT:
     # Need to face top of workpiece down.
 
     # Create facing toolpath
-    side_len = OD + TOOL_DIA + STEPOVER
-    side_len = 28 + TOOL_DIA
-    facing = ToolPathFace(x=side_len, y=side_len)
+    facing = ToolPathFace(x=WORKPIECE_X_LEN, y=WORKPIECE_Y_LEN)
     facing.z_top = 0
     facing.z_bottom = -(WORKPIECE_HEIGHT - HEIGHT)
     facing.stepdown = 1.5
@@ -52,7 +52,7 @@ if WORKPIECE_HEIGHT > HEIGHT:
     job_time += facing.estimated_duration
 
     depth = facing.z_top - facing.z_bottom
-    fn_facing = f"facing-side={side_len:0.2f}-depth={depth:0.2f}.nc"
+    fn_facing = "ring-facing.nc"
     facing.Save(fn_facing)
     AppendFiles(fn_ring, fn_facing)
 
@@ -72,7 +72,7 @@ bore.stepover = STEPOVER
 bore.GCode()
 job_time += bore.estimated_duration
 
-fn_bore = f"bore-id={bore.diameter}.nc"
+fn_bore = f"ring-bore-id={bore.diameter}.nc"
 bore.Save(fn_bore)
 AppendFiles(fn_ring, fn_bore)
 
@@ -83,7 +83,7 @@ profile.diameter = OD
 profile.GCode()
 job_time += profile.estimated_duration
 
-fn_profile = f"profile-id={profile.diameter}.nc"
+fn_profile = f"ring-profile-od={profile.diameter}.nc"
 profile.Save(fn_profile)
 AppendFiles(fn_ring, fn_profile)
 
