@@ -49,23 +49,29 @@ class ToolPath:
         # Heights
         if self.z_top < self.z_bottom:
             raise ValueError(
-                f"Top height ({self.z_top:0.3f}) < bottom height ({self.z_bottom:0.3f})"
+                f"Top height ({self.z_top:0.3f}) < bottom height \
+                    ({self.z_bottom:0.3f})"
             )
 
         if self.z_retract_dist < self.RETRACT_MIN:
             self.z_retract_dist = self.RETRACT_MIN
-            print(f"Warning: retract height adjusted to: {self.z_retract_dist:0.3f}")
+            print(
+                f"Warning: retract height adjusted to: \
+                {self.z_retract_dist:0.3f}"
+            )
 
         if self.stepdown > self.z_top - self.z_bottom:
             self.stepdown = self.z_top - self.z_bottom
             print(
-                f"Warning: Z step was greater than total height, adjusted to: {self.stepdown:0.3f}"
+                f"Warning: Z step was greater than total height, \
+                    adjusted to: {self.stepdown:0.3f}"
             )
 
         # Cutting
         if self.tool_dia < self.stepover:
             raise ValueError(
-                f"Tool diameter ({self.tool_dia:0.3f}) is smaller than stepover ({self.stepover:0.3f})"
+                f"Tool diameter ({self.tool_dia:0.3f}) is smaller than \
+                    stepover ({self.stepover:0.3f})"
             )
 
     @property
@@ -566,7 +572,8 @@ class ToolPathRectangle(ToolPath):
         if plunge_dist > perimeter:
             # Limit ourselves to 1 pass around perimeter for plunge.
             print(
-                f"Warning: limiting plunge distance from ({plunge_dist:0.3f}) to ({perimeter:0.3f})"
+                f"Warning: limiting plunge distance from ({plunge_dist:0.3f})\
+                    to ({perimeter:0.3f})"
             )
             plunge_dist = perimeter
 
@@ -920,7 +927,7 @@ class ToolPathCylinder(ToolPath):
         self.AddLine()
         self.AddLine("; Retract")
         self.AddLine(f"G0 Z{z_retract_abs} F{speed_position}")
-        self.AddLine(f"G0 X0 Y0")
+        self.AddLine("G0 X0 Y0")
 
         # Call parent for footer.
         # super().footer
@@ -1078,7 +1085,7 @@ class ToolPathFace(ToolPath):
         self.AddLine("; Cleanup")
         self.AddLine("M5    ; Stop Spindle")
         self.AddLine(f"G0 Z{self._to_str(self.z_retract_abs)} F{fG0} ; Retract")
-        self.AddLine(f"G0 X0 Y0 ; Return Home")
+        self.AddLine("G0 X0 Y0 ; Return Home")
         self.AddLine("M2    ; Job end")
         self.AddLine("")
 
@@ -1160,6 +1167,7 @@ if __name__ == "__main__":
 
         tp.GCode()
         print(f"Estimated duration: {tp.estimated_duration}")
-        fn = f"cylinder-x{tp.x}mm-y{tp.y}mm-rad{tp.radius}mm-z{tp.z_top-tp.z_bottom}mm.nc"
+        fn = f"cylinder-x{tp.x}mm-y{tp.y}mm-rad{tp.radius}\
+            mm-z{tp.z_top-tp.z_bottom}mm.nc"
         tp.Save(fn)
         print(f"Saved: {fn}")
