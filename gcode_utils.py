@@ -16,8 +16,166 @@
 # TODO: Convert spindle commands to laser commands.  One way?
 # TODO: Concatenate G-Code files.  Might want to deal with headers.
 
+import copy
 import re
+import os
 import numpy as np
+
+
+class ZBlock:
+    def __init__(
+        self, lines: list = [], x: float = None, y: float = None, z: float = None
+    ) -> None:
+        # Defaults
+        self._z = None
+        self._x_start = x
+        self._y_start = y
+        self._z_start = z
+
+        self._re_num = "([+-]?[0-9.]+)"
+
+        if not isinstance(lines, list):
+            raise ValueError("lines must be a list.")
+        lines = [line.strip() for line in lines if line.strip() != ""]
+        self._lines = lines
+        self._lines[-1] += "\n"
+
+        # Current z
+        res = re.search(f"Z{self._re_num}", self._lines[0])
+        if res:
+            self._z = float(res[0].replace("Z", ""))
+
+    def __repr__(self) -> str:
+        return f"ZBlock(z={self.z}, lines={len(self._lines)}, start=[{self.xstart},{self.ystart},{self.zstart}])"
+
+    @property
+    def z(self) -> float:
+        """
+        Z position of this block
+
+        Returns:
+            float: Z position
+        """
+        return self._z
+
+    @z.setter
+    def z(self, value: float) -> None:
+        if not isinstance(value, float):
+            value = float(value)
+
+        # Modify first line of G-code
+        self._lines[0] = re.sub(f"Z{self._re_num}", f"Z{value}", self._lines[0])
+        self._z = value
+
+    @property
+    def lines(self) -> list:
+        """
+        G-code for block as a list of individual lines.
+
+        Returns:
+            list: G-code lines for block
+        """
+        return self._lines
+
+    @property
+    def gcode(self) -> str:
+        """
+        G-code for block.
+
+        Returns:
+            str: G-code for block.
+        """
+
+        return "\n".join(self._lines)
+
+    @property
+    def zstart(self) -> float:
+        """
+        Z position prior to this block
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            _type_: _description_
+        """
+
+        return self._z_start
+
+    @property
+    def xstart(self) -> float:
+        """
+        X position prior to this block.
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            np.float: _description_
+        """
+        return self._x_start
+
+    @property
+    def ystart(self) -> float:
+        """
+        X position prior to this block.
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            np.float: _description_
+        """
+        return self._y_start
+
+    @property
+    def start(self) -> str:
+        """
+        G0 command going to XYZ position prior to this block.
+        Useful if block is replicated to get back to starting position.
+
+        Returns:
+            str: G-code to preposition ahead of this block.
+        """
+
+        gcode = ""
+        if self._x_start is not None:
+            gcode += f"G0 X{self._x_start} "
+        if self._y_start is not None:
+            gcode += f"Y{self._y_start} "
+        if self._z_start is not None:
+            gcode += f"Z{self._z_start} "
+
+        gcode = gcode.strip()
+        gcode += "\n"
+
+        return gcode
+
+    def prepend(self, gcode: str = ""):
+        """
+        Prepend specified G-code to this block.
+
+        Args:
+            gcode (str, optional): G-code to prepend. Defaults to ''.
+        """
+
+        if not isinstance(gcode, str):
+            raise ValueError("gcode must be a string.")
+
+        self._lines.insert(0, gcode)
+
+    def append(self, gcode: str = ""):
+        """
+        Append specified G-code to this block.
+
+        Args:
+            gcode (str, optional): G-code to append. Defaults to ''.
+        """
+
+        if not isinstance(gcode, str):
+            raise ValueError("gcode must be a string.")
+
+        self._lines.append(gcode)
 
 
 class GcodeUtils:
@@ -352,11 +510,133 @@ class GcodeUtils:
             Numpy Array with one entry per Z-level used in G-Code.
         """
 
+        # Find all Z coordinates with line number
+
         zlevels = re.findall(f"Z{self._re_num}", self.gcode)
-        zlevels = list(set(zlevels))  # Get unique values.
         zlevels = list(map(lambda x: float(x), zlevels))
 
         return zlevels
+
+    def zblocks(self) -> list:
+        """
+        Separates gcode into sections by Z-level.
+        Useful for stacked Z operations (2.5D operations).
+        True 3D operations with constant Z motion will return
+        will not be useful.
+
+        Returns:
+            list: Lists of Z-block objects.
+        """
+
+        if self.gcode is None:
+            raise ValueError("No G-code loaded.")
+
+        # Separate G-code into lines.
+        lines = self.gcode.splitlines()
+
+        # List of blocks of commands by z-level.
+        blocks = []
+        block = []
+        x = x_prev = None
+        y = y_prev = None
+        z = z_prev = None
+        regex = re.compile(f"Z{self._re_num}")
+        for line in lines:
+            # If we have a Z command, start a new block.
+            # TODO: need to cache from block for this block.
+            if re.search(regex, line):
+                blocks.append(ZBlock(lines=block, x=x_prev, y=y_prev, z=z_prev))
+                x_prev = x
+                y_prev = y
+                z_prev = z
+                block = []
+
+            # Track starting position for next block.
+            if re.search(f"X{self._re_num}", line):
+                res = re.search(f"X{self._re_num}", line)
+                x = float(res[0].replace("X", ""))
+            if re.search(f"Y{self._re_num}", line):
+                res = re.search(f"Y{self._re_num}", line)
+                y = float(res[0].replace("Y", ""))
+            if re.search(f"Z{self._re_num}", line):
+                res = re.search(f"Z{self._re_num}", line)
+                z = float(res[0].replace("Z", ""))
+
+            # Append line to current block
+            block.append(line)
+
+        return blocks
+
+    def zmultipass(self, z_top: float = None, stepdown: float = None):
+        """
+        Converts a single pass Z cut into multiple Z-passes.
+        Useful for 2.5D operations.
+
+        Algoirthm assumes that moves above the lowest Z-position are moved
+        at a clearance height, thus the material z_top must be specified.
+
+        The filename is modified to denote a multi-pass version of the
+        original file.
+
+        Arguments:
+            (float) z_top: Top of material.
+            (float) stepdown: Distance to step down for each pass.
+        """
+
+        if z_top is None:
+            raise ValueError("z_top must be specified.")
+        if stepdown is None:
+            raise ValueError("stepdown must be specified.")
+        if stepdown == 0:
+            raise ValueError("stepdown must be non-zero.")
+        if stepdown < 0:
+            stepdown = -stepdown
+
+        # Determine pass heights
+        z_min = np.min(self.ZLevels())
+        z_heights = np.arange(z_top - stepdown, z_min, -stepdown)
+        z_heights = np.append(z_heights, z_min)
+        n_heights = len(z_heights)
+
+        # Create new filename
+        fn, ext = os.path.splitext(self.filename)
+        fn += f"-multipass-stepdown-{stepdown:0.3f}"
+        fn += ext
+        self._filename = fn
+
+        # Process the z-blocks in the file.
+        blocks = self.zblocks()
+        code = ""
+        op_num = 1
+        for block in blocks:
+            if block.z == z_min:
+                # Convert to multiple passes
+                op_num += 1
+                for i, z in enumerate(z_heights):
+                    b = copy.deepcopy(block)
+                    b.z = z
+
+                    header = "\n"
+                    header += f"(Operation {op_num})\n"
+                    header += f"(Pass {i+1}/{n_heights}, z={z})"
+
+                    # Return to starting position
+                    if i > 0:
+                        header += f"\nG0 X{b.xstart:0.3f} Y{b.ystart:0.3f}"
+                    b.prepend(header)
+
+                    # Apppend z-lift
+                    if i < n_heights - 1:
+                        lift = f"G0 Z{b.zstart:0.3f}"
+                        b.append(lift)
+
+                    code += b.gcode + "\n"
+
+            else:
+                # Leave alone
+                code += block.gcode
+
+        self._gcode = code
 
     def ReplaceValue(self, command: str, oldvalue: float, newvalue: float):
         """
@@ -434,55 +714,9 @@ class GcodeUtils:
         # Return to starting position
         self.Translate(xyz=center)
 
-    # def RotateAbout(self,x_center:float=0.0,y_center:float=0.0,angle_deg:float=0.0):
-    #     '''
-    #     Performs a 2D rotation of the G-Code in the X-Y plane about the
-    #     specified point.
 
-    #     Parameters
-    #     ----------
-    #     angle_deg: float
-    #         Angle of rotation expressed in degrees.
-    #     x_center: float
-    #         X coordinate of center point of rotation.
-    #     y_center: float
-    #         Y coordinate of center point of rotation.
-
-    #     See also: GcodeUtils.Center
-    #     '''
-    #     raise NotImplementedError()
-
-
-# if __name__ == '__main__':
-
-#     gcu = GcodeUtils(file='logo.nc')
-#     print('Before:')
-#     print(gcu.Powers())
-#     print('')
-
-#     gcu.ReplaceValue('F',1000,1000)
-
-#     print('After:')
-#     print(gcu.Powers())
-#     gcu.Save()
-
-# gu = GcodeUtils()
-# gu.Load("C:\\tmp\\logo_0001.nc")
-# print(f'Pre-move extents: {gu.Extents()}')
-# print(f'Pre-move center : {gu.Center()}')
-# gu.TranslateCenter()
-# print(f'Post-move extents: {gu.Extents()}')
-# print(f'Post-move center : {gu.Center()}')
-# gu.SaveAs("c:\\tmp\\logo-centered.nc")
-
-# gu.Scale(scale_factor=2)
-# gu.SaveAs("c:\\tmp\\logo-scaled2x.nc")
-
-# gu = GcodeUtils()
-# fn = "notebook-logo"
-# # fn = fn + "text"
-# # fn = fn + "outline"
-# gu.Load(fn + ".nc")
-# gu.TranslateCenter()
-# # gu.Translate(x=1,y=1)
-# gu.SaveAs(fn + "-fixed.nc")
+if __name__ == "__main__":
+    fn = "servo-control-module-Edge_Cuts.gbr_iso_combined_cnc.nc"
+    gcu = GcodeUtils(file=fn)
+    gcu.zmultipass(stepdown=0.4, z_top=1.3)
+    gcu.Save()
