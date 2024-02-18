@@ -310,6 +310,52 @@ class GcodeUtils:
         self._gcode = re.sub(f"Y{self._re_num}", offset_y, self._gcode)
         self._gcode = re.sub(f"Z{self._re_num}", offset_z, self._gcode)
 
+    def MirrorY(self):
+        """
+        Mirrors G-Code about the Y-axis.
+
+        See also: GcodeUtils.MirrorX
+        """
+
+        # Have to handle circle/arc mode also
+
+        # Replacement functions
+        def mirror_y(match):
+            value = float(match.group(1)) * -1
+            value = self._to_str(value)
+            return f"X{value}"
+
+        def mirror_i(match):
+            value = float(match.group(1)) * -1
+            value = self._to_str(value)
+            return f"I{value}"
+
+        self._gcode = re.sub(f"X{self._re_num}", mirror_y, self._gcode)
+        self._gcode = re.sub(f"I{self._re_num}", mirror_i, self._gcode)
+
+    def MirrorX(self):
+        """
+        Mirrors G-Code about the X-axis.
+
+        See also: GcodeUtils.MirrorY
+        """
+
+        # Have to handle circle/arc mode also
+
+        # Replacement functions
+        def mirror_x(match):
+            value = float(match.group(1)) * -1
+            value = self._to_str(value)
+            return f"Y{value}"
+
+        def mirror_j(match):
+            value = float(match.group(1)) * -1
+            value = self._to_str(value)
+            return f"J{value}"
+
+        self._gcode = re.sub(f"Y{self._re_num}", mirror_x, self._gcode)
+        self._gcode = re.sub(f"J{self._re_num}", mirror_j, self._gcode)
+
     def Extents(self) -> np.array:
         """
         Calculates extents of G-code in workspace.

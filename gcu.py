@@ -54,6 +54,19 @@ if __name__ == "__main__":
         action="store_true",
         help="Translate G-Code so that bounding box lower right point is (0,0,0).",
     )
+    btransformgroup.add_argument(
+        "-mx",
+        "--mirrorx",
+        action="store_true",
+        help="Mirror G-Code about the x-axis."
+    )
+    btransformgroup.add_argument(
+        "-my",
+        "--mirrory",
+        action="store_true",
+        help="Mirror G-Code about the y-axis."
+    )
+
 
     # TranTransformative - Complex
     ctransformgroup = parser.add_argument_group(
@@ -154,6 +167,14 @@ if __name__ == "__main__":
     if args.translate_upper_right:
         have_transform = True
         gcu.TranslateUpperRight()
+
+    if args.mirrorx:
+        have_transform = True
+        gcu.MirrorX()
+
+    if args.mirrory:
+        have_transform = True
+        gcu.MirrorY()
 
     if args.translate:
         have_transform = True
