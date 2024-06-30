@@ -1,0 +1,3 @@
+#!/usr/bin/bash
+
+python /home/harriman/Projects/gcode-utilities/gcu.py "$@"
