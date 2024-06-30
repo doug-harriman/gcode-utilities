@@ -18,6 +18,12 @@ import datetime as dt
 
 import numpy as np
 import math
+from enum import Enum, auto
+
+
+class Operation(Enum):
+    Pocket = auto()
+    Profile = auto()
 
 
 class ToolPath:
@@ -28,6 +34,7 @@ class ToolPath:
 
     _stepover = 0  # Default to no stepover.
     _tool_dia = 3.175
+    _tool_angle = 0
 
     _z_top = 0.0
     _z_bottom = -3.0
@@ -40,6 +47,8 @@ class ToolPath:
     RETRACT_MIN = 0.5  # [mm]
     PLUNGE_N_DIA = 5  # Execute plunge move in N tool diameters
     EOL = "\n"
+
+    _operation = Operation.Pocket
 
     def ParamCheck(self):
         """
@@ -163,6 +172,24 @@ class ToolPath:
         self._tool_dia = value
 
     @property
+    def tool_angle(self) -> float:
+        """
+        Tool cutter angle in degrees.
+        """
+        return self._tool_angle
+
+    @tool_angle.setter
+    def tool_angle(self, value: float = 0.0):
+        if not isinstance(value, (int, float)):
+            raise TypeError(f"Tool angle must be numeric: {type(value)}")
+
+        # Must be positive
+        if value < 0:
+            value = -value
+
+        self._tool_angle = value
+
+    @property
     def speed_feed(self) -> float:
         """
         Feed speed for cutting operations.
@@ -195,6 +222,20 @@ class ToolPath:
         Read only. Set via tool diameter.
         """
         return self._tool_dia / 2
+
+    @property
+    def operation(self) -> Operation:
+        """
+        Operation type.
+        """
+        return self._operation
+
+    @operation.setter
+    def operation(self, value: Operation):
+        if not isinstance(value, Operation):
+            raise TypeError(f"Operation must be of type Operation: {type(value)}")
+
+        self._operation = value
 
     @property
     def gcode(self) -> str:
@@ -470,7 +511,7 @@ class ToolPathRectangle(ToolPath):
     @property
     def x(self) -> float:
         """
-        X-position for tool path geometry.
+        X-position of lower left corner of rectangle.
         """
         return self._x
 
@@ -481,7 +522,7 @@ class ToolPathRectangle(ToolPath):
     @property
     def y(self) -> float:
         """
-        Y-position for tool path geometry.
+        Y-position of lower left corner of rectangle.
         """
         return self._y
 
@@ -527,76 +568,92 @@ class ToolPathRectangle(ToolPath):
         # Call parent for header.
         # super().header
 
-        # Generate array of corner positions.
-        rt = self.tool_rad
-        # if self.operation == Operation.Pocket:
-        #     rt = -rt
-
-        # Base positions with lower left at (0,0)
-        positions = np.array(
-            [
-                [-rt, -rt],
-                [self.width + rt, -rt],
-                [self.width + rt, self.height + rt],
-                [-rt, self.height + rt],
-            ]
-        )
-
-        # Add in offsets
-        positions[:, 0] += self.x
-        positions[:, 1] += self.y
-        pos_start = positions[0, :]
-
-        # Side lengths
-        # TODO: Convert to for loop
-        lengths = np.array(
-            [positions[1, 0] - positions[0, 0], positions[2, 1] - positions[1, 1]]
-        )
-        lengths = np.append(lengths, lengths, axis=0)
-
-        # Now we get a bit trick.  We want the first move to be from the LL corner
-        # to the LR corner, and the last move to be from the UL to the LL.
-        # Rotate the position matrix.
-        positions = np.roll(positions, positions.shape[0] - 1, axis=0)
-
-        # print(pos_start)
-        # print(positions)
-
-        # Simple for a rectangle.  Should convert to a polygon formula for abstraction.
-        width = self.width + 2 * rt
-        height = self.height + 2 * rt
-        perimeter = 2 * width + 2 * height
-
-        # Figure out which point we get to full depth.
-        plunge_dist = self.tool_dia * self.PLUNGE_N_DIA
-        if plunge_dist > perimeter:
-            # Limit ourselves to 1 pass around perimeter for plunge.
-            print(
-                f"Warning: limiting plunge distance from ({plunge_dist:0.3f})\
-                    to ({perimeter:0.3f})"
-            )
-            plunge_dist = perimeter
-
-        # Calculate Z height at each corner for the first pass.
-        z = np.zeros(lengths.size)
-        for idx in range(0, z.size):
-            length = lengths[idx]
-            if length < plunge_dist:
-                # Won't complete plunge on this side.
-                z[idx] = z[idx - 1] - self.stepdown * length / plunge_dist
-                plunge_dist -= length  # Remaning plunge distance
-
-            else:
-                z[idx] = -self.stepdown
-
-        # print(z)
-
         # Determine total number of passes
         n_passes = (self.z_top - self.z_bottom) / self.stepdown
         n_passes = int(np.ceil(n_passes))
 
         # Add in an additional pass at the bottom to make sure we get full final depth
         n_passes += 1
+
+        # Offset for tool diameter
+        rt = self.tool_rad
+        if self.operation == Operation.Pocket:
+            rt = -rt
+
+        # Deal with tool cutter angle offsets
+        angle_xy_offset = 0
+        if self.tool_angle > 0:
+            z_delta = self.z_top - self.z_bottom
+            angle_xy_offset = z_delta * np.cos(np.deg2rad(self.tool_angle))
+
+            if self.operation == Operation.Pocket:
+                angle_xy_offset = -angle_xy_offset
+
+        # Generate array of corner positions for the outline a the top.
+        # Base positions with lower left at (0,0)
+        # Positions listed for Profile operation.
+        # Sign swap on tool dia above for pocketing will swap offsets.
+        x_min = -rt + angle_xy_offset
+        x_max = self.width + rt - angle_xy_offset
+        y_min = -rt + angle_xy_offset
+        y_max = self.height + rt - angle_xy_offset
+
+        z = self.z_top
+        n_positions = (n_passes + 1) * 5  # 4 corners per pass, but return to first
+        positions = np.zeros((n_positions, 3))
+        positions[0, :] = np.array([x_min, y_min, z])  # Lower left
+        positions[1, :] = np.array([x_max, y_min, z])  # Lower right
+        positions[2, :] = np.array([x_max, y_max, z])  # Upper right
+        positions[3, :] = np.array([x_min, y_max, z])  # Upper left
+        positions[4, :] = np.array([x_min, y_min, z])  # Lower left
+        i = 5
+
+        # Loop through passes capturing corner positions.
+        while z > self.z_bottom:
+            # Step down
+            z_prev = z
+            z -= self.stepdown
+            if z < self.z_bottom:
+                z = self.z_bottom
+            z_delta = z_prev - z  # In case it was capped.
+
+            # Deal with tool cutter angle offsets
+            angle_xy_offset = 0
+            if self.tool_angle > 0:
+                angle_xy_offset = z_delta * np.cos(np.deg2rad(self.tool_angle))
+
+                if self.operation == Operation.Pocket:
+                    angle_xy_offset = -angle_xy_offset
+
+            # Lower left
+            positions[i, :-1] = positions[i - 5, :-1] - angle_xy_offset
+            positions[i, 2] = z
+            i += 1
+
+            # Lower right
+            positions[i, 0] = positions[i - 5, 0] + angle_xy_offset
+            positions[i, 1] = positions[i - 5, 1] - angle_xy_offset
+            positions[i, 2] = z
+            i += 1
+
+            # Upper right
+            positions[i, :-1] = positions[i - 5, :-1] + angle_xy_offset
+            positions[i, 2] = z
+            i += 1
+
+            # Upper left
+            positions[i, 0] = positions[i - 5, 0] - angle_xy_offset
+            positions[i, 1] = positions[i - 5, 1] + angle_xy_offset
+            positions[i, 2] = z
+            i += 1
+
+            # Back to lower left.
+            positions[i, :] = positions[i - 4, :]
+            i += 1
+
+        # Add in XY offsets
+        positions[:, 0] += self.x
+        positions[:, 1] += self.y
 
         # Pre conversions
         z_retract_abs = self._to_str(self.z_retract_abs)
@@ -632,6 +689,7 @@ class ToolPathRectangle(ToolPath):
         # Go to starting position
         self.AddLine("; Position for start")
         self.AddLine(f"G0 Z{z_retract_abs} F{speed_position}")
+        pos_start = positions[0, :]
         self.AddLine(f"G0 X{self._to_str(pos_start[0])} Y{self._to_str(pos_start[1])}")
         self.AddLine()
 
@@ -646,27 +704,25 @@ class ToolPathRectangle(ToolPath):
         self.AddLine("; Move to start position")
         self.AddLine(f"G1 Z{self._to_str(self.z_top)} F{speed_feed}")
 
-        for i_pass in range(0, n_passes):
-            self.AddLine()
-            self.AddLine(f"; Pass {i_pass+1}")
+        # Drop the first positions from the list.
+        positions = np.delete(positions, [0, 1, 2, 3, 4], axis=0)
 
-            for idx, position in enumerate(positions):
-                x_str = self._to_str(position[0])
-                y_str = self._to_str(position[1])
-                z_str = self._to_str(z[idx])
+        for i, pos in enumerate(positions):
+            if i % 5 == 0:
+                self.AddLine()
+                self.AddLine(f"; Pass: {int(i/5)+1}/{n_passes-1}")
 
-                self.AddLine(f"G1 X{x_str} Y{y_str} Z{z_str}")
+            x_str = self._to_str(pos[0])
+            y_str = self._to_str(pos[1])
+            z_str = self._to_str(pos[2])
 
-            # Step down
-            z -= self.stepdown
-
-            # Cap at bottom
-            z[z < self.z_bottom] = self.z_bottom
+            self.AddLine(f"G1 X{x_str} Y{y_str} Z{z_str}")
 
         # Retract
         self.AddLine()
         self.AddLine("; Retract")
         self.AddLine(f"G0 Z{z_retract_abs} F{speed_position}")
+        self.AddLine("G0 X0 Y0")
 
         # Call parent for footer.
         # super().footer
