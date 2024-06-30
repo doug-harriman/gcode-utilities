@@ -809,7 +809,7 @@ def powers(ctx, filename: str):
 
     checkfile(filename)
     gcu = GcodeUtils(file=filename)
-    print(gcu.Powers())
+    print(f"Powers: {gcu.Powers()}")
 
 
 @task
@@ -839,7 +839,7 @@ def speeds(ctx, filename: str):
     checkfile(filename)
 
     gcu = GcodeUtils(file=filename)
-    print(gcu.Speeds())
+    print(f"Speeds: {gcu.Speeds()}")
 
 
 @task
@@ -889,6 +889,23 @@ def extents(ctx, filename: str):
     print(
         f"\tdx={ext[3]-ext[0]}\t\t   dy={ext[4]-ext[1]}\t\t   dz={ext[5]-ext[2]}"
     )
+
+
+@task
+def zlevels(ctx, filename: str):
+    """
+    Prints all Z-levels in the G-Code.
+    """
+
+    checkfile(filename)
+
+    gcu = GcodeUtils(file=filename)
+    values = gcu.ZLevels()
+    if values is None:
+        return
+    values = set(values)
+    values = str(values).replace("{", "").replace("}", "")
+    print(f"ZLevels: {values}")
 
 
 # if __name__ == '__main__':
