@@ -587,6 +587,7 @@ class ToolPathRectangle(ToolPath):
             rt = -rt
 
         # Deal with tool cutter angle offsets
+        # TODO: This should only support cuts
         angle_xy_offset = 0
         if self.tool_angle > 0:
             z_delta = self.z_top - self.z_bottom
@@ -604,66 +605,36 @@ class ToolPathRectangle(ToolPath):
         y_min = -rt + angle_xy_offset
         y_max = self.height + rt - angle_xy_offset
 
-        z = self.z_top
-        n_positions = (
-            n_passes + 1
-        ) * 5  # 4 corners per pass, but return to first
+        perimeter = 2 * (self.width + self.height)
+        dz_dx = -self.stepdown * self.width / perimeter
+        dz_dy = -self.stepdown * self.height / perimeter
+
+        # Cutting passes start at the top
+        # Tool will be positioned at the first corner to begin cutting.
+        n_positions = 4  # rectangle
         positions = np.zeros((n_positions, 3))
-        positions[0, :] = np.array([x_min, y_min, z])  # Lower left
-        positions[1, :] = np.array([x_max, y_min, z])  # Lower right
-        positions[2, :] = np.array([x_max, y_max, z])  # Upper right
-        positions[3, :] = np.array([x_min, y_max, z])  # Upper left
-        positions[4, :] = np.array([x_min, y_min, z])  # Lower left
-        i = 5
 
-        # Loop through passes capturing corner positions.
-        while z > self.z_bottom:
-            # Step down
-            z_prev = z
-            z -= self.stepdown
-            if z < self.z_bottom:
-                z = self.z_bottom
-            z_delta = z_prev - z  # In case it was capped.
+        # x_min,y_min -> x_max,y_min = dx
+        z = self.z_top + dz_dx
+        positions[0, :] = np.array([x_max, y_min, z])
 
-            # Deal with tool cutter angle offsets
-            angle_xy_offset = 0
-            if self.tool_angle > 0:
-                angle_xy_offset = z_delta * np.cos(np.deg2rad(self.tool_angle))
+        # x_max, y_min -> x_max, y_max = dy
+        z += dz_dy
+        positions[1, :] = np.array([x_max, y_max, z])
 
-                if self.operation == Operation.Pocket:
-                    angle_xy_offset = -angle_xy_offset
+        # x_max, y_max -> x_min, y_max = -dx
+        z += dz_dx
+        positions[2, :] = np.array([x_min, y_max, z])
 
-            # Lower left
-            positions[i, :-1] = positions[i - 5, :-1] - angle_xy_offset
-            positions[i, 2] = z
-            i += 1
-
-            # Lower right
-            positions[i, 0] = positions[i - 5, 0] + angle_xy_offset
-            positions[i, 1] = positions[i - 5, 1] - angle_xy_offset
-            positions[i, 2] = z
-            i += 1
-
-            # Upper right
-            positions[i, :-1] = positions[i - 5, :-1] + angle_xy_offset
-            positions[i, 2] = z
-            i += 1
-
-            # Upper left
-            positions[i, 0] = positions[i - 5, 0] - angle_xy_offset
-            positions[i, 1] = positions[i - 5, 1] + angle_xy_offset
-            positions[i, 2] = z
-            i += 1
-
-            # Back to lower left.
-            positions[i, :] = positions[i - 4, :]
-            i += 1
+        # x_min, y_max -> x_min, y_min = -dy
+        z += dz_dy
+        positions[3, :] = np.array([x_min, y_min, z])
 
         # Add in XY offsets
         positions[:, 0] += self.x
         positions[:, 1] += self.y
 
-        # Pre conversions
+        # Other values
         z_retract_abs = self._to_str(self.z_retract_abs)
         speed_position = self._to_str(self._speed_position)
         speed_feed = self._to_str(self._speed_feed)
@@ -699,7 +670,7 @@ class ToolPathRectangle(ToolPath):
         # Go to starting position
         self.AddLine("; Position for start")
         self.AddLine(f"G0 Z{z_retract_abs} F{speed_position}")
-        pos_start = positions[0, :]
+        pos_start = np.array([x_min, y_min])
         self.AddLine(
             f"G0 X{self._to_str(pos_start[0])} Y{self._to_str(pos_start[1])}"
         )
@@ -716,18 +687,40 @@ class ToolPathRectangle(ToolPath):
         self.AddLine("; Move to start position")
         self.AddLine(f"G1 Z{self._to_str(self.z_top)} F{speed_feed}")
 
-        # Drop the first positions from the list.
-        positions = np.delete(positions, [0, 1, 2, 3, 4], axis=0)
+        i_pass = 1
+        while np.any(positions[:, 2] > self.z_bottom):
+            print(f"Pass: {i_pass}/{n_passes}, {self.stepdown}", flush=True)
+            self.AddLine()
+            self.AddLine(f"; Pass: {int(i_pass)}/{n_passes}")
 
-        for i, pos in enumerate(positions):
-            if i % 5 == 0:
-                self.AddLine()
-                self.AddLine(f"; Pass: {int(i/5)+1}/{n_passes-1}")
+            # Write the pass
+            for i_pt, pos in enumerate(positions):
+                x_str = self._to_str(pos[0])
+                y_str = self._to_str(pos[1])
+                z_str = self._to_str(pos[2])
+                self.AddLine(f"G1 X{x_str} Y{y_str} Z{z_str}")
 
+            # Stepdown
+            positions[:, 2] -= self.stepdown
+
+            # If some but not all positions are < bottom,
+            # set them to bottom.
+            idx = positions[:, 2] < self.z_bottom
+            positions[idx, 2] = self.z_bottom
+
+            i_pass += 1
+
+        # Perform final pass at bottom.
+        print(f"Pass: {i_pass}/{n_passes}, {self.stepdown}", flush=True)
+        self.AddLine()
+        self.AddLine(f"; Pass: {int(i_pass)}/{n_passes}")
+
+        # Write the pass
+        positions[:, 2] = self.z_bottom
+        for i_pt, pos in enumerate(positions):
             x_str = self._to_str(pos[0])
             y_str = self._to_str(pos[1])
             z_str = self._to_str(pos[2])
-
             self.AddLine(f"G1 X{x_str} Y{y_str} Z{z_str}")
 
         # Retract
