@@ -13,7 +13,14 @@
 # TODO: Support units
 # TODO: CLI.  Use click.
 # TODO: JSON config?
-
+# TODO: Should chlid objs should use **kwargs to pass in parameters to parent.
+# TODO: Support config file for milling params.
+#       Maybe a to/from JSON or TOML.
+# TODO: Toolpath repr and str
+# TODO: Add a method that will generate G-code to just trace the perimeter of an overall path.
+#       This provides a check to show that the toolpath fits on the workpiece.
+# TODO: Use https://github.com/CadQuery/cadquery to generate 3D geometry of toolpath
+#       Create tool as a cylinder and use the Workplane.sweep command to follow toolpaths.
 import datetime as dt
 
 import numpy as np
@@ -22,8 +29,13 @@ from enum import Enum, auto
 
 
 class Operation(Enum):
-    Pocket = auto()
-    Profile = auto()
+    POCKET = auto()
+    PROFILE = auto()
+
+
+class MillDirection(Enum):
+    CLIMB = auto()
+    CONVENTIONAL = auto()
 
 
 class ToolPath:
@@ -48,7 +60,7 @@ class ToolPath:
     PLUNGE_N_DIA = 5  # Execute plunge move in N tool diameters
     EOL = "\n"
 
-    _operation = Operation.Pocket
+    _operation = Operation.POCKET
 
     def ParamCheck(self):
         """
@@ -336,6 +348,8 @@ class ToolPath:
             datetime.timedelta: Estimated duration of job
         """
 
+        # TODO: This underestimates a simple calc of distance / feedrate.
+        # Review implementation and see if it's worth keeping.
         from gcoder import GCode
 
         gc = GCode(self.gcode_lines())
@@ -583,7 +597,7 @@ class ToolPathRectangle(ToolPath):
 
         # Offset for tool diameter
         rt = self.tool_rad
-        if self.operation == Operation.Pocket:
+        if self.operation == Operation.POCKET:
             rt = -rt
 
         # Deal with tool cutter angle offsets
@@ -593,7 +607,7 @@ class ToolPathRectangle(ToolPath):
             z_delta = self.z_top - self.z_bottom
             angle_xy_offset = z_delta * np.cos(np.deg2rad(self.tool_angle))
 
-            if self.operation == Operation.Pocket:
+            if self.operation == Operation.POCKET:
                 angle_xy_offset = -angle_xy_offset
 
         # Generate array of corner positions for the outline a the top.
@@ -614,21 +628,46 @@ class ToolPathRectangle(ToolPath):
         n_positions = 4  # rectangle
         positions = np.zeros((n_positions, 3))
 
-        # x_min,y_min -> x_max,y_min = dx
-        z = self.z_top + dz_dx
-        positions[0, :] = np.array([x_max, y_min, z])
+        # The order of these points determines if we do climb or
+        # conventional milling.
 
-        # x_max, y_min -> x_max, y_max = dy
-        z += dz_dy
-        positions[1, :] = np.array([x_max, y_max, z])
+        mill_dir = MillDirection.CLIMB
 
-        # x_max, y_max -> x_min, y_max = -dx
-        z += dz_dx
-        positions[2, :] = np.array([x_min, y_max, z])
+        if mill_dir == MillDirection.CONVENTIONAL:
+            # x_min,y_min -> x_max,y_min = dx
+            z = self.z_top + dz_dx
+            positions[0, :] = np.array([x_max, y_min, z])
 
-        # x_min, y_max -> x_min, y_min = -dy
-        z += dz_dy
-        positions[3, :] = np.array([x_min, y_min, z])
+            # x_max, y_min -> x_max, y_max = dy
+            z += dz_dy
+            positions[1, :] = np.array([x_max, y_max, z])
+
+            # x_max, y_max -> x_min, y_max = -dx
+            z += dz_dx
+            positions[2, :] = np.array([x_min, y_max, z])
+
+            # x_min, y_max -> x_min, y_min = -dy
+            z += dz_dy
+            positions[3, :] = np.array([x_min, y_min, z])
+        elif mill_dir == MillDirection.CLIMB:
+            # x_min,y_min -> x_min,y_max = +dy
+            z = self.z_top + dz_dy
+            positions[0, :] = np.array([x_min, y_max, z])
+
+            # x_min,y_max -> x_max,y_max = +dx
+            z += dz_dx
+            positions[1, :] = np.array([x_max, y_max, z])
+
+            # x_max,y_max -> x_max,y_min = -dy
+            z += dz_dy
+            positions[2, :] = np.array([x_max, y_min, z])
+
+            # x_max,y_min -> x_min,y_min = -dx
+            z += dz_dx
+            positions[3, :] = np.array([x_min, y_min, z])
+
+        else:
+            raise ValueError(f"Invalid milling direction: {mill_dir}")
 
         # Add in XY offsets
         positions[:, 0] += self.x
@@ -670,7 +709,7 @@ class ToolPathRectangle(ToolPath):
         # Go to starting position
         self.AddLine("; Position for start")
         self.AddLine(f"G0 Z{z_retract_abs} F{speed_position}")
-        pos_start = np.array([x_min, y_min])
+        pos_start = np.array([x_min + self.x, y_min + self.y])
         self.AddLine(
             f"G0 X{self._to_str(pos_start[0])} Y{self._to_str(pos_start[1])}"
         )
