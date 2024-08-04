@@ -14,10 +14,17 @@ if __name__ == "__main__":
         description="G-Code utiltity functions for simple G-Code files."
     )
     parser.add_argument("file", help="G-Code input file name.")
-    filegroup = parser.add_argument_group(title="Output file for G-Code transforms")
-    filegroup.add_argument("-o", "--out", default=None, help="Output file name..")
+    filegroup = parser.add_argument_group(
+        title="Output file for G-Code transforms"
+    )
     filegroup.add_argument(
-        "-r", "--replace", action="store_true", help="Replace input file with output."
+        "-o", "--out", default=None, help="Output file name.."
+    )
+    filegroup.add_argument(
+        "-r",
+        "--replace",
+        action="store_true",
+        help="Replace input file with output.",
     )
 
     # Transformative - Basic
@@ -58,15 +65,14 @@ if __name__ == "__main__":
         "-mx",
         "--mirrorx",
         action="store_true",
-        help="Mirror G-Code about the x-axis."
+        help="Mirror G-Code about the x-axis.",
     )
     btransformgroup.add_argument(
         "-my",
         "--mirrory",
         action="store_true",
-        help="Mirror G-Code about the y-axis."
+        help="Mirror G-Code about the y-axis.",
     )
-
 
     # TranTransformative - Complex
     ctransformgroup = parser.add_argument_group(
@@ -105,7 +111,10 @@ if __name__ == "__main__":
         action="store_true",
     )
     ctransformgroup.add_argument(
-        "--old", help="Original value for value changes.", type=float, default=None
+        "--old",
+        help="Original value for value changes.",
+        type=float,
+        default=None,
     )
     ctransformgroup.add_argument(
         "--new", help="New value for value changes.", type=float, default=None
@@ -129,7 +138,9 @@ if __name__ == "__main__":
         help="Display G-Code bounding box extents.",
     )
     infogroup.add_argument(
-        "--speeds", action="store_true", help="Display unique speed values in G-Code."
+        "--speeds",
+        action="store_true",
+        help="Display unique speed values in G-Code.",
     )
     infogroup.add_argument(
         "--powers",
@@ -137,7 +148,9 @@ if __name__ == "__main__":
         help="Display unique laser power values in G-Code.",
     )
     infogroup.add_argument(
-        "--zlevels", action="store_true", help="Display unique Z values in G-Code."
+        "--zlevels",
+        action="store_true",
+        help="Display unique Z values in G-Code.",
     )
 
     args = parser.parse_args()
@@ -224,7 +237,7 @@ if __name__ == "__main__":
 
     def print_center():
         c = gcu.Center()
-        print(f"Center : x={c[0]}, y={c[1]}, z={c[2]}")
+        print(f"Center : x={c[0]:0.3f}, y={c[1]:0.3f}, z={c[2]:0.3f}")
 
     if args.center:
         have_informational = True
@@ -233,10 +246,14 @@ if __name__ == "__main__":
     def print_extents():
         ext = gcu.Extents()
         print(f"Extents: ")
-        print(f"  x_min={ext[0]}\t\ty_min={ext[1]}\t\tz_min={ext[2]}")
-        print(f"  x_max={ext[3]}\t\ty_max={ext[4]}\t\tz_max={ext[5]}")
         print(
-            f"     dx={ext[3]-ext[0]}\t\t   dy={ext[4]-ext[1]}\t\t   dz={ext[5]-ext[2]}"
+            f"  x_min={ext[0]:0.3f}\t\ty_min={ext[1]:0.3f}\t\tz_min={ext[2]:0.3f}"
+        )
+        print(
+            f"  x_max={ext[3]:0.3f}\t\ty_max={ext[4]:0.3f}\t\tz_max={ext[5]:0.3f}"
+        )
+        print(
+            f"     dx={ext[3]-ext[0]:0.3f}\t\t   dy={ext[4]-ext[1]:0.3f}\t\t   dz={ext[5]-ext[2]:0.3f}"
         )
 
     if args.extents:
@@ -273,7 +290,7 @@ if __name__ == "__main__":
             return
         values = set(values)
         values = str(values).replace("{", "").replace("}", "")
-        print(f"ZLevels: {values}")
+        print(f"ZLevels: {values:0.3f}")
 
     if args.zlevels:
         have_informational = True
