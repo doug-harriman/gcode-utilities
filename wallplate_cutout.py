@@ -1,23 +1,19 @@
 # wallplate_cutout.py
 # Cut out recangular hole in wallplate for an outlet box.
 
-# TODO: Should ramp in and add another pass at bottom.
-# TODO: Should chlid objs should use **kwargs to pass in parameters to parent.
-# TODO: Support config file for milling params.
-#       Maybe a to/from JSON or TOML.
-# TODO: Toolpath repr and str
 
 from toolpaths import ToolPathRectangle, Operation
 
 # Rectangle dimensions
 WIDTH_X = 70 + 2
 HEIGHT_Y = 115 + 2
-DEPTH_Z = 25.4 * (1 / 8)
+DEPTH_Z = 10
 
 # Rectangle location
 # Relative to tool starting position.
-X = 0
-Y = 0
+# Start in the middle of the rectangle.
+X = -WIDTH_X / 2
+Y = -HEIGHT_Y / 2
 
 # Milling parameters
 # Tool
@@ -42,7 +38,7 @@ rect.speed_position = POS_RATE
 rect.tool_dia = TOOL_DIA
 rect.stepdown = STEPDOWN
 rect.stepover = STEPOVER
-rect.operation = Operation.Pocket
+rect.operation = Operation.POCKET
 
 # Generate GCode
 fn = "wallplate-cutout.nc"
