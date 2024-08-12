@@ -1,8 +1,17 @@
 # CAD Query GUI bin:
 # C:\Users\harriman\cq-editor\Scripts\CQ-editor.exe
 
+# Interesting alternative to CAD Query:
+# https://github.com/gumyr/build123d
+
 # Using visualization server
 # https://github.com/bernhard-42/jupyter-cadquery
+
+# VS Code plugin by Bernhard 42
+# https://marketplace.visualstudio.com/items?itemName=bernhard-42.ocp-cad-viewer
+
+# CAM package:
+# https://ocp-freecad-cam.readthedocs.io/en/latest/index.html
 
 
 import cadquery as cq
