@@ -49,6 +49,17 @@ class Tool(BasePartObject):
         return self.diameter / 2
 
     def to_stock_home(self, stock: Solid) -> None:
+        """
+        Move the tool to the stock home position.
+        The home position is defined as the point:
+        * Touching the top of the stock
+        * Tool centered at the front left corner of the stock
+          (min X, min Y, max Z).
+
+        Args:
+            stock (Solid): The stock to move the tool to.
+
+        """
 
         bb = stock.bounding_box()
         x = bb.min.X

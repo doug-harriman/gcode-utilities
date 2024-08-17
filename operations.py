@@ -83,8 +83,16 @@ class Operation(ABC):
 
         self._ops = []
 
-    def __str__(self):
-        return f"Operation:({self.part}, {self.tool}, {self.stock})"
+    def __str__(self) -> str:
+        return f"Operation({self.name}, Tool: {self.tool.type})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
 
     @property
     def part(self):
@@ -249,7 +257,10 @@ class Operation(ABC):
                 # Arc counter-clockwise
                 pass
 
-        return Wire(edges)
+        wire = Wire(edges)
+        wire.label = f"Toolpath: {self}"
+
+        return wire
 
 
 class OperationFace(Operation):
@@ -261,6 +272,10 @@ class OperationFace(Operation):
         self, part=None, tool=None, stock=None, height_safe: float = 5.0
     ):
         super().__init__(part, tool, stock, height_safe)
+
+    @property
+    def name(self) -> str:
+        return "Face"
 
     def generate(self) -> None:
         """
@@ -287,10 +302,6 @@ class OperationFace(Operation):
         # Move to pre-cut position
         x_start = -self.tool.radius + self.woc
         y_start = y_min
-        ops.append(f"G0 X{x_start} Y{y_start}")
-        z -= self.doc
-        ops.append(f"G0 Z{z:0.3f}")
-        x = x_start
 
         # TODO: Spin up tool
 
@@ -302,6 +313,17 @@ class OperationFace(Operation):
         while z >= z_min:
             i_pass += 1
             ops.append(f"; Pass {i_pass}")
+
+            # Move to start position
+            # TODO: need to reverse order of operations.
+            x = x_start
+            ops.append(
+                f"G0 X{x_start:0.3f} Y{y_start:0.3f} {str_speed_position}"
+            )
+
+            # Move to new Z position
+            ops.append(f"G0 Z{z:0.3f} {str_speed_position}")
+
             while x < x_max:
                 # Move to +Y
                 ops.append(f"G1 Y{y_max} {str_speed_feed}")
@@ -317,16 +339,14 @@ class OperationFace(Operation):
                 x += self.woc
                 ops.append(f"G1 X{x} {str_speed_position}")
 
+            # Look for last pass.
+            if z == z_min:
+                break
+
             # Index down
             z -= self.doc
-            ops.append(f"G0 Z{z:0.3f} {str_speed_position}")
-
-            # Retrace
-            # TODO: need to reverse order of operations.
-            x = x_start
-            ops.append(
-                f"G0 X{x_start:0.3f} Y{y_start:0.3f} {str_speed_position}"
-            )
+            if z < z_min:
+                z = z_min
 
         # TODO: Add in final pass if needed.
         print("Warning: Final pass not implemented.")
