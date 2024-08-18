@@ -1,6 +1,17 @@
 # tools.py
 # Tool definition and database.
-from build123d import BasePartObject, Solid, Location, Color
+from build123d import (
+    BasePartObject,
+    Solid,
+    Location,
+    Edge,
+    Plane,
+    Vector,
+    Rectangle,
+    Color,
+    sweep,
+)
+import numpy as np
 
 
 # Create a tool
@@ -47,6 +58,54 @@ class Tool(BasePartObject):
     @property
     def radius(self) -> float:
         return self.diameter / 2
+
+    def sweep(self, loc: Location) -> Solid:
+        """
+        Sweeps the tool from current location to specified location.
+
+        TODO: Should move the tool too.
+
+        Args:
+            loc (Location): The location to sweep to.
+        Returns:
+            Solid: The swept volume.
+        """
+        # Need to project the cutting end & sides of the tool.
+
+        # Create an edge to sweept through for cut.
+        edge = Edge.make_line(self.position, loc.position)
+
+        # Generate a vector from the edge to define a sweep plane normal.
+        normal = Vector(edge.vertices()[1] - edge.vertices()[0]).normalized()
+
+        # Currently only handling XY cutting motions.
+        if not np.isclose(normal.Z, 0):
+            return None
+
+        # Side projection
+        # 2D geo always created on the XY plane.
+        r = Rectangle(
+            self.diameter, self.length
+        )  # Created with center at origin.
+        r = r.translate((0, self.length / 2))  # Tool bottom centered on origin.
+
+        # Create a plane for projection, centered on the end of the tool,
+        # p = Plane.XY.rotated((90, 0, 0))  # Y-axis is normal to the tool end.
+        p = Plane.XY.rotated((90, 0, 0)).rotated(
+            (0, 0, 90)
+        )  # X-axis is normal to the tool end.
+
+        # Move the plane from the origin to the current tool location.
+        p = p.move(self.location)
+
+        # Rotate the plane to match the tool orientation in the XY plane
+        theta = Vector((1, 0, 0)).get_signed_angle(normal, Vector((0, 0, 1)))
+        p = p.rotated((0, 0, theta))
+
+        # Extrude the 2D geometry to create the swept volume.
+        vol = sweep(p * r, path=edge)
+
+        return vol
 
     def to_stock_home(self, stock: Solid) -> None:
         """
