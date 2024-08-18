@@ -3,7 +3,16 @@
 
 from abc import ABC, abstractmethod
 import re
-from build123d import Solid, Wire, Edge, Vector, Location, Color
+from build123d import (
+    Solid,
+    Plane,
+    Wire,
+    Edge,
+    Vector,
+    Location,
+    Color,
+    Rectangle,
+)
 
 # TODO: Check bounding box dimensions against machine limits
 # TODO: Rotate the model if necessary to fit
@@ -321,15 +330,19 @@ class Operation(ABC):
         # Iterate through the edges, removing material.
         for loc in self.locations[1:]:
 
-            # Remove end point from stock
-            self.tool.location = loc
-            self.stock -= self.tool
+            cut_solid = self.tool.sweep(loc)
+            if cut_solid:
+                self.stock -= cut_solid
 
             if animate:
                 self.stock.label = props["label"]
                 self.stock.color = props["color"]
-                show(self.part, self.stock, self.tool)
+                show(self.part, self.stock, self.tool)  # , cut_solid)
                 time.sleep(0.1)
+
+            # Remove end point from stock
+            self.tool.location = loc
+            self.stock -= self.tool
 
         # Replace stock proprties
         self.stock.label = props["label"]
@@ -369,12 +382,12 @@ class OperationFace(Operation):
         op_safe_z = f"G0 Z{safe_z:0.3f} {str_speed_position}"
 
         # Y extents moving tool center clear of stock
-        # y_max = self.stock.bounding_box().max.Y + self.tool.radius * 1.1
-        # y_min = self.stock.bounding_box().min.Y - self.tool.radius * 1.1
+        y_max = self.stock.bounding_box().max.Y + self.tool.radius * 1.1
+        y_min = self.stock.bounding_box().min.Y - self.tool.radius * 1.1
 
         # Test position to make sure ends getting cut.
-        y_max = self.stock.bounding_box().max.Y
-        y_min = self.stock.bounding_box().min.Y
+        # y_max = self.stock.bounding_box().max.Y
+        # y_min = self.stock.bounding_box().min.Y
 
         # Move the tool to the first position
         z = self.stock.bounding_box().max.Z
