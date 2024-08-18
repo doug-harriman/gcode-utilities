@@ -82,6 +82,7 @@ class Operation(ABC):
         self.woc = woc
 
         self._ops = []
+        self.locations = None
 
     def __str__(self) -> str:
         return f"Operation({self.name}, Tool: {self.tool.type})"
@@ -162,7 +163,7 @@ class Operation(ABC):
         self._woc = value
 
     @property
-    def gcode(self, filename: str = None) -> str:
+    def gcode(self) -> str:
         """
         Generate GCode for operation.
 
@@ -173,21 +174,35 @@ class Operation(ABC):
             str: G-Code as a string.
         """
 
-        if self._gcode is None:
+        if not self._ops:
             self.generate()
 
         s = "\n".join(self._ops)
 
-        if filename:
-            with open(filename, "w") as f:
-                f.write(s)
-
         return s
+
+    def save_gcode(self, filename: str = None) -> None:
+        """
+        Save G-Code to a file.
+
+        Args:
+            filename: Filename to save G-Code to.
+        """
+
+        if filename is None:
+            filename = f"{self.name.lower()}.nc"
+
+        if not isinstance(filename, str):
+            raise ValueError("Filename must be a string.")
+
+        with open(filename, "w") as f:
+            f.write(self.gcode)
 
     @abstractmethod
     def generate(self):
         pass
 
+    @property
     def toolpath(self) -> Wire:
         """
         Generate toolpath for operation.
@@ -213,7 +228,18 @@ class Operation(ABC):
 
         # Process operations
         edges = []
+        locations = [Location(pos)]
         for op in self._ops:
+
+            # Skip empty lines
+            op = op.strip()
+            if not op:
+                continue
+
+            # Skip comments
+            if op.startswith(";"):
+                continue
+
             # Parse operation
             # TODO: Assumes G0 or G1 for now
             cmd = "G1"
@@ -249,6 +275,7 @@ class Operation(ABC):
                 e = Edge.make_line(pos, vec)
                 edges.append(e)
                 pos = vec
+                locations.append(Location(pos))
 
             elif cmd == "G2":
                 # Arc clockwise
@@ -260,7 +287,56 @@ class Operation(ABC):
         wire = Wire(edges)
         wire.label = f"Toolpath: {self}"
 
+        self.locations = locations
+
         return wire
+
+    def cut(self, animate: bool = False) -> Solid:
+        """
+        Apply the machining operation, cutting the part.
+
+        Assumptions: Wire is continuous.
+
+        Side effects:
+        - Modifies the stock, removing material per the tool path.
+        """
+
+        if animate:
+            from ocp_vscode import show
+            import time
+
+        if not self.locations:
+            self.to_wire()
+
+        # Get stock properties.
+        props = {}
+        props["label"] = self.stock.label
+        props["color"] = self.stock.color
+        props["material"] = self.stock.material
+
+        # Move to first position
+        self.tool.location = self.locations[0]
+        self.stock -= self.tool
+
+        # Iterate through the edges, removing material.
+        for loc in self.locations[1:]:
+
+            # Remove end point from stock
+            self.tool.location = loc
+            self.stock -= self.tool
+
+            if animate:
+                self.stock.label = props["label"]
+                self.stock.color = props["color"]
+                show(self.part, self.stock, self.tool)
+                time.sleep(0.1)
+
+        # Replace stock proprties
+        self.stock.label = props["label"]
+        self.stock.color = props["color"]
+        self.stock.material = props["material"]
+
+        return self.stock
 
 
 class OperationFace(Operation):
@@ -292,8 +368,13 @@ class OperationFace(Operation):
         str_speed_position = f"F{self.speed_position:d}"
         op_safe_z = f"G0 Z{safe_z:0.3f} {str_speed_position}"
 
-        y_max = self.stock.bounding_box().max.Y + self.tool.radius * 1.1
-        y_min = self.stock.bounding_box().min.Y - self.tool.radius * 1.1
+        # Y extents moving tool center clear of stock
+        # y_max = self.stock.bounding_box().max.Y + self.tool.radius * 1.1
+        # y_min = self.stock.bounding_box().min.Y - self.tool.radius * 1.1
+
+        # Test position to make sure ends getting cut.
+        y_max = self.stock.bounding_box().max.Y
+        y_min = self.stock.bounding_box().min.Y
 
         # Move the tool to the first position
         z = self.stock.bounding_box().max.Z
@@ -310,8 +391,10 @@ class OperationFace(Operation):
         x_max = self.stock.bounding_box().max.X
         z_min = self.part.bounding_box().max.Z
         i_pass = 0
+        z = -self.doc
         while z >= z_min:
             i_pass += 1
+            ops.append("\n")
             ops.append(f"; Pass {i_pass}")
 
             # Move to start position
@@ -326,18 +409,18 @@ class OperationFace(Operation):
 
             while x < x_max:
                 # Move to +Y
-                ops.append(f"G1 Y{y_max} {str_speed_feed}")
+                ops.append(f"G1 Y{y_max:0.3f} {str_speed_feed}")
 
                 # Index over
                 x += self.woc
-                ops.append(f"G1 X{x} {str_speed_position}")
+                ops.append(f"G1 X{x:0.3f} {str_speed_position}")
 
                 # Move to -Y
-                ops.append(f"G1 Y{y_min} {str_speed_feed}")
+                ops.append(f"G1 Y{y_min:0.3f} {str_speed_feed}")
 
                 # Index over
                 x += self.woc
-                ops.append(f"G1 X{x} {str_speed_position}")
+                ops.append(f"G1 X{x:0.3f} {str_speed_position}")
 
             # Look for last pass.
             if z == z_min:
@@ -347,9 +430,6 @@ class OperationFace(Operation):
             z -= self.doc
             if z < z_min:
                 z = z_min
-
-        # TODO: Add in final pass if needed.
-        print("Warning: Final pass not implemented.")
 
         # Leave the tool at a safe height
         ops.append(op_safe_z)
