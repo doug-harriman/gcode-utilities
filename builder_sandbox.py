@@ -29,7 +29,7 @@ f.doc = 0.75
 f.generate()
 f.save_gcode()
 toolpath = f.toolpath
-stock = f.cut()
+stock = f.cut(animate=True)
 
 
-show(part, stock, tool, toolpath)
+# show(part, stock, tool, toolpath)
