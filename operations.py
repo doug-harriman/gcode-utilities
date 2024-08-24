@@ -2,20 +2,41 @@
 # Operations for CNC machining using builder123d.
 
 from abc import ABC, abstractmethod
+import logging
 import re
+import numpy as np
 from build123d import (
     Solid,
-    Plane,
+    # Plane,
     Wire,
     Edge,
     Vector,
     Location,
     Color,
-    Rectangle,
+    # Rectangle,
 )
+from tools import Tool
 
 # TODO: Check bounding box dimensions against machine limits
-# TODO: Rotate the model if necessary to fit
+# TODO: Rotate the model if necessary to fit.
+# - If we can get principle axes, that should identify the minimum bounding box.
+# TODO: Pull  machining direction enum from toolpaths.py
+# TODO: Add radial and axial stock to leave for finishing operations.
+# TODO: Leverage concept of a gcode document from gcode_doc.py to manage general setup.
+# TODO: Operation base class should required all parameters to be set in constructor.
+# - When new value is set, clear out the generated toolpath to manage state.
+
+# Operations todo list:
+# - Bore - spiral in.  Needed for starting a pocket.
+# - Slot - Useful for optimizing profiling to avoid completely machining stock that can be left alone.
+# - Face - Add new face operation to spiral in.
+# - Pocket - Spiral out.
+# - Profile - Spiral in, with slotting optimization.
+# - Drill - Pecking.  Easy one.  Good to have auto drill matching diameters.
+# - Profile - 3D profile.  Need to add a ball end mill.
+# - Chamfer - 3D chamfer.  Need to add a chamfer tool.
+# - Engrave - V-carve.  Need to add a V-bit tool.
+# - Simple single tool width cutting operations to cut out circles, rectangles, etc.  Leverage toolpaths.py.
 
 
 def stock_make(part, margin: float = 1.0) -> Solid:
@@ -39,10 +60,10 @@ def stock_make(part, margin: float = 1.0) -> Solid:
     """
 
     bbox = part.bounding_box()
-    vec_margin = Vector(margin, margin, margin)
+    vec_margin = Vector(margin, margin, 0)
 
     corner1 = bbox.min - vec_margin
-    corner2 = bbox.max + vec_margin
+    corner2 = bbox.max + vec_margin + Vector(0, 0, margin)
 
     # Stock size
     sz = corner2 - corner1
@@ -60,6 +81,7 @@ def stock_make(part, margin: float = 1.0) -> Solid:
 
     # Move the part to be centered in the stock.
     loc.position = stock.center() - bbox.center()
+    loc.position.Z = stock.position.Z  # Put part on bottom of stock
     part.move(loc)
 
     return stock
@@ -68,14 +90,16 @@ def stock_make(part, margin: float = 1.0) -> Solid:
 class Operation(ABC):
     def __init__(
         self,
-        part=None,
-        tool=None,
-        stock=None,
+        part: Solid,
+        tool: Tool,
+        stock: Solid,
         height_safe: float = 5.0,
         speed_feed: int = 100,
         speed_position: int = 100,
         doc: float = 0.3,
         woc: float = 0.5,
+        stock_to_leave_radial: float = 0.0,
+        stock_to_leave_axial: float = 0.0,
     ):
 
         self.part = part
@@ -90,8 +114,13 @@ class Operation(ABC):
         self.doc = doc
         self.woc = woc
 
+        self._stock_to_leave_radial = stock_to_leave_radial
+        self._stock_to_leave_axial = stock_to_leave_axial
+
         self._ops = []
-        self.locations = None
+        self._locations = None
+
+        self._logger = logging.getLogger(__name__)
 
     def __str__(self) -> str:
         return f"Operation({self.name}, Tool: {self.tool.type})"
@@ -106,27 +135,52 @@ class Operation(ABC):
 
     @property
     def part(self):
+        """
+        Part machining operation is generating.
+        """
         return self._part
 
     @part.setter
     def part(self, value):
+
+        if not isinstance(value, Solid):
+            raise ValueError("Part must be a Solid object.")
+
         self._part = value
+        self._ops = []  # Clear out operations settings change
 
     @property
     def tool(self):
+        """
+        Tool used for this machining operation.
+        """
         return self._tool
 
     @tool.setter
     def tool(self, value):
+
+        if not isinstance(value, Tool):
+            raise ValueError("Tool must be a Tool object.")
+
         self._tool = value
+        self._ops = []  # Clear out operations settings change
 
     @property
     def stock(self):
+        """
+        Stock from which to machine the part.
+        """
+
         return self._stock
 
     @stock.setter
     def stock(self, value):
+
+        if not isinstance(value, Solid):
+            raise ValueError("Stock must be a Solid object.")
+
         self._stock = value
+        self._ops = []  # Clear out operations settings change
 
     @property
     def height_safe(self):
@@ -134,7 +188,17 @@ class Operation(ABC):
 
     @height_safe.setter
     def height_safe(self, value):
+
+        try:
+            value = float(value)
+        except ValueError:
+            raise ValueError("Value must be numeric.")
+
+        if value < 0:
+            raise ValueError("Value must be positive.")
+
         self._height_safe = value
+        self._ops = []  # Clear out operations settings change
 
     @property
     def speed_feed(self):
@@ -142,7 +206,17 @@ class Operation(ABC):
 
     @speed_feed.setter
     def speed_feed(self, value):
+
+        try:
+            value = float(value)
+        except ValueError:
+            raise ValueError("Value must be numeric.")
+
+        if value < 0:
+            raise ValueError("Value must be positive.")
+
         self._speed_feed = int(value)
+        self._ops = []  # Clear out operations settings change
 
     @property
     def speed_position(self):
@@ -150,7 +224,17 @@ class Operation(ABC):
 
     @speed_position.setter
     def speed_position(self, value):
-        self._speed_position = int(value)
+
+        try:
+            value = int(value)
+        except ValueError:
+            raise ValueError("Value must be numeric.")
+
+        if value < 0:
+            raise ValueError("Value must be positive.")
+
+        self._speed_position = value
+        self._ops = []  # Clear out operations settings change
 
     @property
     def doc(self) -> float:
@@ -161,7 +245,17 @@ class Operation(ABC):
 
     @doc.setter
     def doc(self, value: float):
+
+        try:
+            value = float(value)
+        except ValueError:
+            raise ValueError("Value must be numeric.")
+
+        if value < 0:
+            raise ValueError("Value must be positive.")
+
         self._doc = value
+        self._ops = []  # Clear out operations settings change
 
     @property
     def woc(self) -> float:
@@ -169,7 +263,61 @@ class Operation(ABC):
 
     @woc.setter
     def woc(self, value: float):
+
+        try:
+            value = float(value)
+        except ValueError:
+            raise ValueError("Value must be numeric.")
+
+        if value < 0:
+            raise ValueError("Value must be positive.")
+
         self._woc = value
+        self._ops = []  # Clear out operations settings change
+
+    @property
+    def stock_to_leave_radial(self) -> float:
+        """
+        Stock to leave radial direction.
+        """
+
+        return self._stock_to_leave_radial
+
+    @stock_to_leave_radial.setter
+    def stock_to_leave_radial(self, value: float):
+
+        try:
+            value = float(value)
+        except ValueError:
+            raise ValueError("Value must be numeric.")
+
+        if value < 0:
+            raise ValueError("Value must be positive.")
+
+        self._stock_to_leave_radial = value
+        self._ops = []  # Clear out operations settings change
+
+    @property
+    def stock_to_leave_axial(self) -> float:
+        """
+        Stock to leave axial direction.
+        """
+
+        return self._stock_to_leave_axial
+
+    @stock_to_leave_axial.setter
+    def stock_to_leave_axial(self, value: float):
+
+        try:
+            value = float(value)
+        except ValueError:
+            raise ValueError("Value must be numeric.")
+
+        if value < 0:
+            raise ValueError("Value must be positive.")
+
+        self._stock_to_leave_axial = value
+        self._ops = []  # Clear out operations settings change
 
     @property
     def gcode(self) -> str:
@@ -296,7 +444,7 @@ class Operation(ABC):
         wire = Wire(edges)
         wire.label = f"Toolpath: {self}"
 
-        self.locations = locations
+        self._locations = locations
 
         return wire
 
@@ -314,8 +462,8 @@ class Operation(ABC):
             from ocp_vscode import show
             import time
 
-        if not self.locations:
-            self.to_wire()
+        if not self._locations:
+            self.to_wire()  # Generates locations too.
 
         # Get stock properties.
         props = {}
@@ -324,25 +472,21 @@ class Operation(ABC):
         props["material"] = self.stock.material
 
         # Move to first position
-        self.tool.location = self.locations[0]
-        self.stock -= self.tool
+        self.tool.location = self._locations[0]
+        self._stock -= self.tool  # Avoid type check.
 
         # Iterate through the edges, removing material.
-        for loc in self.locations[1:]:
+        for loc in self._locations[1:]:
 
-            cut_solid = self.tool.sweep(loc)
-            if cut_solid:
-                self.stock -= cut_solid
+            # Remove cut volume from stock
+            cut = self.tool.sweep(loc)
+            self._stock -= cut
 
             if animate:
                 self.stock.label = props["label"]
                 self.stock.color = props["color"]
                 show(self.part, self.stock, self.tool)  # , cut_solid)
                 time.sleep(0.1)
-
-            # Remove end point from stock
-            self.tool.location = loc
-            self.stock -= self.tool
 
         # Replace stock proprties
         self.stock.label = props["label"]
@@ -353,14 +497,30 @@ class Operation(ABC):
 
 
 class OperationFace(Operation):
+    """
+    Back and forth facing operation.
+
+    See: Operation
+    """
 
     # TODO: Face over all of stock or just part
     # TODO: Machining direction: both, climb, standard(?)
 
     def __init__(
-        self, part=None, tool=None, stock=None, height_safe: float = 5.0
+        self,
+        part: Solid,
+        tool: Tool,
+        stock: Solid,
+        **kwargs,
     ):
-        super().__init__(part, tool, stock, height_safe)
+        super().__init__(part, tool, stock, **kwargs)
+
+        # Facing does not support radial stock to leave
+        if not np.isclose(self._stock_to_leave_radial, 0.0):
+            self._logger.warning(
+                "Facing operation does not support radial stock to leave."
+            )
+            self._stock_to_leave_radial = 0.0
 
     @property
     def name(self) -> str:
@@ -402,9 +562,14 @@ class OperationFace(Operation):
         # Do the facing operations
         # TODO: Loop to top face of part
         x_max = self.stock.bounding_box().max.X
-        z_min = self.part.bounding_box().max.Z
+        z_min = self.part.bounding_box().max.Z + self.stock_to_leave_axial
         i_pass = 0
         z = -self.doc
+
+        # Degenerate case of a single pass that's smaller than the DOC.
+        if z < z_min:
+            z = z_min
+
         while z >= z_min:
             i_pass += 1
             ops.append("\n")

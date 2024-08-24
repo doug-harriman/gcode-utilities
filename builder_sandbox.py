@@ -24,11 +24,14 @@ tool = Tool(diameter=3.175, length=25.4)
 tool.to_stock_home(stock)
 
 f = OperationFace(part=part, tool=tool, stock=stock)
+# f.stock_to_leave_axial = 0.5
+# f.stock_to_leave_radial = 0.5
 f.woc = tool.diameter * 0.4
 f.doc = 0.75
 f.generate()
 f.save_gcode()
-toolpath = f.toolpath
+# toolpath = f.toolpath
+# stock = f.cut()
 stock = f.cut(animate=True)
 
 
