@@ -4,27 +4,29 @@
 from abc import ABC, abstractmethod
 import logging
 import re
+from typing import List
 import numpy as np
 from build123d import (
     Solid,
-    # Plane,
+    Plane,
+    Axis,
     Wire,
     Edge,
     Vector,
+    Vertex,
     Location,
     Color,
     # Rectangle,
 )
+from builder123d_utils import *
 from tools import Tool
 
 # TODO: Check bounding box dimensions against machine limits
 # TODO: Rotate the model if necessary to fit.
 # - If we can get principle axes, that should identify the minimum bounding box.
 # TODO: Pull  machining direction enum from toolpaths.py
-# TODO: Add radial and axial stock to leave for finishing operations.
 # TODO: Leverage concept of a gcode document from gcode_doc.py to manage general setup.
-# TODO: Operation base class should required all parameters to be set in constructor.
-# - When new value is set, clear out the generated toolpath to manage state.
+# TODO: Allow setting of a bottom position just below bottom of part.
 
 # Operations todo list:
 # - Bore - spiral in.  Needed for starting a pocket.
@@ -494,6 +496,320 @@ class Operation(ABC):
         self.stock.material = props["material"]
 
         return self.stock
+
+
+class Bore:
+    """
+    Defines a circular bore into a part.
+    """
+
+    def __init__(self, circle: Wire, part: Solid):
+
+        if not circle.is_circle:
+            raise ValueError("Circle must be a circle.")
+
+        # Make sure circle is in the XY plane
+        vertices = circle.edges()[0].vertices()
+        if vertices[0].Z != vertices[1].Z:
+            raise ValueError("Circle must be in the XY plane.")
+
+        self._circle = circle
+        self._part = part
+
+        # The bore top and bottom are a Vertex at the center of the circle
+        # at the top and bottom positions.
+        x = np.mean([vertices[0].X, vertices[1].X])
+        y = np.mean([vertices[0].Y, vertices[1].Y])
+        z = vertices[0].Z
+        self._top = Vertex(x, y, z)
+
+        # Find the bottom face of the bore.
+        v = vertices[0]
+
+        # Find the non-horizontal faces that contain the vertex.
+        v_faces = [face for face in part.faces() if v in face.vertices()]
+        v_faces = [
+            face
+            for face in v_faces
+            if np.isclose(face.normal_at(face.center()).Z, 0)
+        ]
+
+        # Find a vertex on the bottom odf those faces.
+        z_min = (v_faces[0].vertices() << Axis.Z)[0].Z
+
+        self._bottom = Vertex(x, y, z_min)
+
+    @property
+    def top(self) -> Vertex:
+        """
+        Vertex at top center of bore.
+        """
+        return self._top
+
+    @property
+    def bottom(self) -> Vertex:
+        """
+        Vertex at bottom center of bore.
+        """
+        return self._bottom
+
+    @property
+    def radius(self) -> float:
+        """
+        Radius of bore.
+        """
+
+        return self._circle.edges()[0].radius
+
+    @property
+    def diameter(self) -> float:
+        """
+        Diameter of bore.
+        """
+        return 2 * self.radius
+
+    @property
+    def depth(self) -> float:
+        """
+        Depth of bore.
+        """
+        return self.top.Z - self.bottom.Z
+
+    @classmethod
+    def find_bores(self, part: Solid) -> List["Bore"]:
+        """
+        Find all circular bores in a part.
+
+        Args:
+            part: Part to search for bores.
+
+        Returns:
+            List[Bore]: List of bores in the part.
+        """
+
+        if not isinstance(part, Solid):
+            raise ValueError("Part must be a Solid object.")
+
+        circles = []
+        for face in part.faces() | Plane.XY:
+
+            # Faces parallel with the XY plane.
+            if np.isclose(face.normal_at(face.center()).Z, 1):
+                # Positive Z face
+                face_circles = face.circular_holes
+
+                if face_circles:
+                    for circle in face_circles:
+                        circles.append(circle)
+
+        bores = []
+        for circle in circles:
+            bores.append(Bore(circle, part))
+
+        return bores
+
+    def show(self):
+        """
+        Show the bore.
+        """
+        from ocp_vscode import show_object
+
+        show_object(self._circle)
+        show_object(self._top)
+        show_object(self._bottom)
+
+
+class OperationBore(Operation):
+    """
+    Boring operation.
+
+    See: Operation
+    """
+
+    def __init__(
+        self,
+        part: Solid,
+        tool: Tool,
+        stock: Solid,
+        diameter_min: float = None,
+        diameter_max: float = None,
+        **kwargs,
+    ):
+        super().__init__(
+            part,
+            tool,
+            stock,
+            **kwargs,
+        )
+
+        self._diameter_min = diameter_min
+        self._diameter_max = diameter_max
+
+        self._holes = None
+
+    @property
+    def name(self) -> str:
+        return "Bore"
+
+    @property
+    def diameter_min(self) -> float:
+        """
+        Minimum diameter hole to bore.
+
+        All ciricular holes with a diameter equal to or larger
+        than this value will be bored.
+
+        If None, the minimum diameter to bore is 1.1 times the tool diameter plus
+        the radial stock to leave.
+
+        Defaults to None.
+        """
+
+        return self._diameter_min
+
+    @diameter_min.setter
+    def diameter_min(self, value: float):
+
+        # Allow value to be cleared
+        if value is None:
+            self._diameter_min = None
+            self._ops = []
+            return
+
+        try:
+            value = float(value)
+        except ValueError:
+            raise ValueError("Value must be numeric.")
+        if value < 0:
+            raise ValueError("Value must be positive.")
+        self._diameter_min = value
+        self._ops = []
+
+    @property
+    def diameter_max(self) -> float:
+        """
+        Maximum diameter hole to bore.
+
+        All ciricular holes with a diameter equal to or smaller
+        than this value will be bored.
+
+        If None, there is no upper limit imposed.
+
+        Defaults to None.
+        """
+        return self._diameter_max
+
+    @diameter_max.setter
+    def diameter_max(self, value: float):
+
+        # Allow value to be cleared
+        if value is None:
+            self._diameter_max = None
+            self._ops = []
+            return
+
+        try:
+            value = float(value)
+        except ValueError:
+            raise ValueError("Value must be numeric.")
+        if value < 0:
+            raise ValueError("Value must be positive.")
+        self._diameter_max = value
+        self._ops = []
+
+    @property
+    def holes(self) -> List[Wire]:
+        """
+        List of wires representing holes to bore.
+
+        This value will be automatically generated from the part if not set.
+
+        If set, autogeneration of list will not be performed.
+
+        """
+
+        if self._holes:
+            return self._holes
+
+        # Minimum diameter to bore
+        if self.diameter_min is None:
+            diameter_min = self.tool.diameter * 1.1 + self.stock_to_leave_radial
+            self.diameter_min = diameter_min
+
+        # Maximum diameter to bore
+        if self.diameter_max is None:
+            diameter_max = np.inf
+            self.diameter_max = diameter_max
+
+        # No holes set, generate from part
+        circles = []
+        for face in self.part.faces() | Plane.XY:
+
+            # Faces parallel with the XY plane.
+            if np.isclose(face.normal_at(face.center()).Z, 1):
+                # Positive Z face
+                face_circles = face.circular_holes
+
+                if face_circles:
+                    for circle in face_circles:
+                        circles.append(circle)
+
+        # Find circles that have a diameter within the range.
+        self._holes = []
+        for circle in circles:
+            if (
+                circle.edges()[0].radius * 2 >= self.diameter_min
+                and circle.edges()[0].radius * 2 <= self.diameter_max
+            ):
+                self._holes.append(circle)
+
+        return self._holes
+
+    @holes.setter
+    def holes(self, value: list[Wire]):
+
+        # Allow value to be cleared
+        if value is None:
+            self._holes = value
+            self._ops = []
+            return
+
+        # Allow single wire to be passed in.
+        if not isinstance(value, list):
+            if isinstance(value, Wire):
+                value = [value]
+
+        if not isinstance(value, list):
+            raise ValueError("Value must be a list.")
+        if not all(isinstance(v, Wire) for v in value):
+            raise ValueError("All values must be Wire objects.")
+        self._holes = value
+        self._ops = []
+
+    def generate(self) -> None:
+        """
+        Generate toolpath for operation.
+        """
+
+        raise NotImplementedError("Bore operation not implemented.")
+
+        # Operations list
+        ops = []
+
+        # Precalculated data
+        # Save Z position
+        safe_z = self.stock.bounding_box().max.Z + self.height_safe
+        str_speed_feed = f"F{self.speed_feed:d}"
+        str_speed_position = f"F{self.speed_position:d}"
+        op_safe_z = f"G0 Z{safe_z:0.3f} {str_speed_position}"
+
+        # Move the tool to the first position
+        z = self.stock.bounding_box().max.Z
+        ops.append(op_safe_z)
+
+        # Move to pre-cut position
+        x_start = -self.tool.radius + self.woc
+        y_start = self.stock.bounding_box().min.Y
 
 
 class OperationFace(Operation):
