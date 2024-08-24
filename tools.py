@@ -78,9 +78,13 @@ class Tool(BasePartObject):
         # Generate a vector from the edge to define a sweep plane normal.
         normal = Vector(edge.vertices()[1] - edge.vertices()[0]).normalized()
 
+        # Tool endpoint solid.
+        self.location = loc
+        vol = self
+
         # Currently only handling XY cutting motions.
         if not np.isclose(normal.Z, 0):
-            return None
+            return vol
 
         # Side projection
         # 2D geo always created on the XY plane.
@@ -103,7 +107,7 @@ class Tool(BasePartObject):
         p = p.rotated((0, 0, theta))
 
         # Extrude the 2D geometry to create the swept volume.
-        vol = sweep(p * r, path=edge)
+        vol += sweep(p * r, path=edge)
 
         return vol
 
