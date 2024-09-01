@@ -4,6 +4,7 @@ from pathlib import Path
 from operations import OperationFace, stock_make
 from tools import Tool
 
+show_clear()
 
 # Alsways need 3 pieces of geometry for a machining operation:
 # 1) The part
@@ -12,6 +13,7 @@ from tools import Tool
 
 # 1) Load a 3D model from a file
 fn_part = "simple-part.step"
+# fn_part = "simple-part-with-holes.step"
 part = import_step(fn_part)
 part.label = Path(fn_part).stem
 part.color = Color("Orange")
@@ -30,9 +32,9 @@ f.woc = tool.diameter * 0.4
 f.doc = 0.75
 f.generate()
 f.save_gcode()
-# toolpath = f.toolpath
-# stock = f.cut()
-stock = f.cut(animate=True)
+toolpath = f.toolpath
+stock = f.cut()
+# stock = f.cut(animate=True)
 
 
-# show(part, stock, tool, toolpath)
+show(part, stock, tool, toolpath)
