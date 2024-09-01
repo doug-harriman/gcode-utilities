@@ -12,6 +12,15 @@ from build123d import (
     sweep,
 )
 import numpy as np
+from enum import Enum, auto
+
+
+class ToolType(Enum):
+    FlatEndMill = auto()
+    BallEndMill = auto()
+    SnubNoseEndMill = (auto(),)
+    ChamferMill = (auto(),)
+    Drill = (auto(),)
 
 
 # Create a tool
