@@ -2,6 +2,7 @@
 # Operations for CNC machining using builder123d.
 
 from abc import ABC, abstractmethod
+from enum import Enum, auto
 import logging
 import re
 from typing import List
@@ -87,6 +88,11 @@ def stock_make(part, margin: float = 1.0) -> Solid:
     part.move(loc)
 
     return stock
+
+
+class MillDirection(Enum):
+    CLIMB = auto()
+    CONVENTIONAL = auto()
 
 
 class Operation(ABC):
@@ -379,7 +385,7 @@ class Operation(ABC):
         if not self._ops:
             self.generate()
 
-        expr = "G[01]\s*(X(?P<X>-?\d*\.?\d*))?\s*(Y(?P<Y>-?\d*\.?\d*))?\s*(Z(?P<Z>-?\d*\.?\d*))?"
+        expr = "(?P<CMD>G\d+)\s*(X(?P<X>-?\d*\.?\d*))?\s*(Y(?P<Y>-?\d*\.?\d*))?\s*(Z(?P<Z>-?\d*\.?\d*))?"
         expr = re.compile(expr)
 
         # Initial position
@@ -400,9 +406,6 @@ class Operation(ABC):
                 continue
 
             # Parse operation
-            # TODO: Assumes G0 or G1 for now
-            cmd = "G1"
-
             res = expr.match(op)
 
             # Skip ops that don't match
@@ -410,6 +413,7 @@ class Operation(ABC):
                 continue
 
             vals = res.groupdict()
+            cmd = vals.pop("CMD")
             vals = {
                 k: float(v) if v is not None else None for k, v in vals.items()
             }
@@ -438,10 +442,12 @@ class Operation(ABC):
 
             elif cmd == "G2":
                 # Arc clockwise
-                pass
+                raise NotImplementedError("G2 Arcs not implemented.")
             elif cmd == "G3":
                 # Arc counter-clockwise
-                pass
+                raise NotImplementedError("G3 Arcs not implemented.")
+            else:
+                raise ValueError(f"Unsupported G-code: {cmd}")
 
         wire = Wire(edges)
         wire.label = f"Toolpath: {self}"
@@ -575,6 +581,22 @@ class Bore:
         """
         return self.top.Z - self.bottom.Z
 
+    @property
+    def circle(self) -> Wire:
+        """
+        Returns Wire defining the circle a the top of the bore
+        """
+
+        return self._circle
+
+    @property
+    def part(self) -> Solid:
+        """
+        Returns the part that the bore is in.
+        """
+
+        return self._part
+
     @classmethod
     def find_bores(self, part: Solid) -> List["Bore"]:
         """
@@ -626,6 +648,12 @@ class OperationBore(Operation):
     See: Operation
     """
 
+    # TODO Should only bore holes in the part, not the stock.
+    # - Check to see if there's any stock immediately above the hole.
+    # - Check that stock material exists in the bore, skip if not.
+    # TODO: Should project cicle-like wires to an XY plane to see if there's
+    #       a circular hole on a face that is not parallel to XY plane
+
     def __init__(
         self,
         part: Solid,
@@ -645,7 +673,7 @@ class OperationBore(Operation):
         self._diameter_min = diameter_min
         self._diameter_max = diameter_max
 
-        self._holes = None
+        self._bores = []
 
     @property
     def name(self) -> str:
@@ -718,9 +746,9 @@ class OperationBore(Operation):
         self._ops = []
 
     @property
-    def holes(self) -> List[Wire]:
+    def bores(self) -> List[Bore]:
         """
-        List of wires representing holes to bore.
+        List of Bores in the part that the Tool can machine.
 
         This value will be automatically generated from the part if not set.
 
@@ -728,70 +756,57 @@ class OperationBore(Operation):
 
         """
 
-        if self._holes:
-            return self._holes
+        if len(self._bores) > 0:
+            return self._bores
 
         # Minimum diameter to bore
         if self.diameter_min is None:
-            diameter_min = self.tool.diameter * 1.1 + self.stock_to_leave_radial
+            diameter_min = (
+                self.tool.diameter * 1.1 + 2 * self.stock_to_leave_radial
+            )
             self.diameter_min = diameter_min
 
         # Maximum diameter to bore
         if self.diameter_max is None:
-            diameter_max = np.inf
-            self.diameter_max = diameter_max
+            self.diameter_max = (
+                1.98 * self.tool.diameter + 2 * self.stock_to_leave_radial
+            )
 
-        # No holes set, generate from part
-        circles = []
-        for face in self.part.faces() | Plane.XY:
-
-            # Faces parallel with the XY plane.
-            if np.isclose(face.normal_at(face.center()).Z, 1):
-                # Positive Z face
-                face_circles = face.circular_holes
-
-                if face_circles:
-                    for circle in face_circles:
-                        circles.append(circle)
-
-        # Find circles that have a diameter within the range.
-        self._holes = []
-        for circle in circles:
+        self._bores = []
+        for bore in Bore.find_bores(self.part):
             if (
-                circle.edges()[0].radius * 2 >= self.diameter_min
-                and circle.edges()[0].radius * 2 <= self.diameter_max
+                bore.diameter >= self.diameter_min
+                and bore.diameter <= self.diameter_max
             ):
-                self._holes.append(circle)
+                self._bores.append(bore)
 
-        return self._holes
+        return self._bores
 
-    @holes.setter
-    def holes(self, value: list[Wire]):
+    @bores.setter
+    def bores(self, value: list[Bore]):
 
         # Allow value to be cleared
         if value is None:
-            self._holes = value
+            self._bores = value
             self._ops = []
             return
 
         # Allow single wire to be passed in.
         if not isinstance(value, list):
-            if isinstance(value, Wire):
+            if isinstance(value, Bore):
                 value = [value]
 
         if not isinstance(value, list):
             raise ValueError("Value must be a list.")
         if not all(isinstance(v, Wire) for v in value):
             raise ValueError("All values must be Wire objects.")
-        self._holes = value
+        self._bores = value
         self._ops = []
 
     def generate(self) -> None:
         """
-        Generate toolpath for operation.
+        Generate toolpath for bore operations.
         """
-
-        raise NotImplementedError("Bore operation not implemented.")
 
         # Operations list
         ops = []
@@ -803,13 +818,82 @@ class OperationBore(Operation):
         str_speed_position = f"F{self.speed_position:d}"
         op_safe_z = f"G0 Z{safe_z:0.3f} {str_speed_position}"
 
-        # Move the tool to the first position
+        # Toolpath raidus
+        bores = self.bores
+        if len(bores) == 0:
+            raise ValueError("Part contains no bores")
+
+        # TODO: Loop on bores.
+        bore = self.bores[0]
+
+        # Header
+        ops.append("\n")
+        ops.append(";---------------------")
+        ops.append("; Bore Operation")
+        ops.append(f"; X = {bore.top.x:0.3f}")
+        ops.append(f"; Y = {bore.top.x:0.3f}")
+        ops.append(f"; Radius = {bore.radius:0.3f}")
+        ops.append(f"; Depth  = {bore.depth:0.3f}")
+        ops.append(";---------------------")
+
+        radius = bore.radius - self.tool.radius - self.stock_to_leave_radial
+        center_x = bore.top.X
+        center_y = bore.top.Y
+
+        # Make sure we're safe for positioning.
         z = self.stock.bounding_box().max.Z
         ops.append(op_safe_z)
 
         # Move to pre-cut position
-        x_start = -self.tool.radius + self.woc
-        y_start = self.stock.bounding_box().min.Y
+        # Find intersection of line between tool position to hole center
+        # and the toolpath circle.
+        vect = self.tool.location.position - bore.top
+        ratio = radius / vect.length
+
+        x_start = bore.top.X + vect.X * ratio
+        y_start = bore.top.Y + vect.Y * ratio
+
+        ops.append(f"G0 X{x_start:0.3f} Y{y_start:0.3f} F{str_speed_position}")
+
+        # Move tool to 1/2 DOC above bore top
+        z = bore.top.Z + self.doc / 2
+        ops.append(f"G0 Z{z:0.3f} F{str_speed_position}")
+
+        # Generate the Arc G-code
+        # Move in full circles spiraling down.
+        vec = bore.top - Vector(center_x, center_y, bore.top.Z)
+        I = vec.X
+        J = vec.Y
+        z_min = bore.bottom.Z
+
+        # First cut depth
+        z -= self.doc
+
+        # TODO: Spin up tool
+
+        # Degenerate case of a single pass that's smaller than the DOC.
+        if z < z_min:
+            z = z_min
+
+        while z >= z_min:
+            ops.append(f"G2 I{I:0.3f} J{J:0.3f} Z{z:0.3f} F{str_speed_feed}")
+
+            # Look for last pass.
+            if z == z_min:
+                break
+
+            # Index down
+            z -= self.doc
+            if z < z_min:
+                z = z_min
+
+        # Last path all at final depth.
+        ops.append(f"G2 I{I:0.3f} J{J:0.3f} F{str_speed_feed}")
+
+        # Leave the tool at a safe height
+        ops.append(op_safe_z)
+
+        self._ops = ops
 
 
 class OperationFace(Operation):
