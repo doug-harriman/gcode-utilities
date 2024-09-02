@@ -8,6 +8,7 @@ import re
 from typing import List
 import numpy as np
 from build123d import (
+    Part,
     Solid,
     Plane,
     Axis,
@@ -151,7 +152,7 @@ class Operation(ABC):
     @part.setter
     def part(self, value):
 
-        if not isinstance(value, Solid):
+        if not isinstance(value, (Part, Solid)):
             raise ValueError("Part must be a Solid object.")
 
         self._part = value
@@ -184,7 +185,7 @@ class Operation(ABC):
     @stock.setter
     def stock(self, value):
 
-        if not isinstance(value, Solid):
+        if not isinstance(value, (Part, Solid)):
             raise ValueError("Stock must be a Solid object.")
 
         self._stock = value
