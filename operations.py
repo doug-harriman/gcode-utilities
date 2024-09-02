@@ -430,10 +430,7 @@ class Operation(ABC):
             vec = Vector(**vals)
 
             # Process command
-            if cmd == "G0":
-                # Move to position
-                pass
-            elif cmd == "G1":
+            if cmd == "G0" or cmd == "G1":
                 # Linear move
                 e = Edge.make_line(pos, vec)
                 edges.append(e)
@@ -940,6 +937,7 @@ class OperationFace(Operation):
         str_speed_feed = f"F{self.speed_feed:d}"
         str_speed_position = f"F{self.speed_position:d}"
         op_safe_z = f"G0 Z{safe_z:0.3f} {str_speed_position}"
+        ops.append(op_safe_z)
 
         # Y extents moving tool center clear of stock
         y_max = self.stock.bounding_box().max.Y + self.tool.radius * 1.1
@@ -948,10 +946,6 @@ class OperationFace(Operation):
         # Test position to make sure ends getting cut.
         # y_max = self.stock.bounding_box().max.Y
         # y_min = self.stock.bounding_box().min.Y
-
-        # Move the tool to the first position
-        z = self.stock.bounding_box().max.Z
-        ops.append(op_safe_z)
 
         # Move to pre-cut position
         x_start = -self.tool.radius + self.woc
@@ -964,6 +958,7 @@ class OperationFace(Operation):
         x_max = self.stock.bounding_box().max.X
         z_min = self.part.bounding_box().max.Z + self.stock_to_leave_axial
         i_pass = 0
+        z = self.stock.bounding_box().max.Z
         z = -self.doc
 
         # Degenerate case of a single pass that's smaller than the DOC.
@@ -986,6 +981,7 @@ class OperationFace(Operation):
             ops.append(f"G0 Z{z:0.3f} {str_speed_position}")
 
             while x < x_max:
+                # TODO: Should modify moves so that index also cuts.  Slightly less overtravel.
                 # Move to +Y
                 ops.append(f"G1 Y{y_max:0.3f} {str_speed_feed}")
 
