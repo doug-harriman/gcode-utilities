@@ -21,11 +21,13 @@ def test_basic_face(show_result, animate):
     # 1) Load a 3D model from a file
     fn_part = "simple-part.step"
     part = part_load(fn_part)
-    part_face_top = part.faces() >> Axis.Z
-    part_face_top_z = part_face_top.vertices()[0].Z
 
     # 2) Generate fitting stock
     stock = stock_make(part, margin=2)
+
+    # Craeting stock will move the part
+    part_face_top = part.faces() >> Axis.Z
+    part_face_top_z = part_face_top.vertices()[0].Z
 
     # 3) Create tool and home it
     tool = Tool(diameter=3.175, length=25.4)
