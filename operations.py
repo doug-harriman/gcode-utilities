@@ -830,9 +830,11 @@ class OperationBore(Operation):
         for bore in value:
             print(bore.diameter, self.diameter_min, self.diameter_max)
             if (
-                bore.diameter >= self.diameter_min
-                and bore.diameter <= self.diameter_max
-                and bore.depth <= self.tool.length + self.stock_to_leave_axial
+                bore.diameter >= self.diameter_min  # Minimum diameter
+                and bore.diameter <= self.diameter_max  # Maximum diameter
+                and bore.depth
+                <= self.tool.length + self.stock_to_leave_axial  # Depth
+                and bore.top.Z >= self.stock.bounding_box().max.Z  # Top clear
             ):
                 self._bores.append(bore)
 

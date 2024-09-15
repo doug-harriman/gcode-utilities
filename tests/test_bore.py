@@ -5,7 +5,8 @@
 #     import_step,
 # )
 
-# from ocp_vscode import show, show_clear
+from ocp_vscode import show, show_clear
+import time
 from operations import OperationBore, stock_make
 from tools import Tool
 
@@ -88,3 +89,33 @@ def test_find_shallow_bore(part):
     op.stock_to_leave_axial = 4
     op.find_bores()
     assert len(op.bores) == 4  # All are accessible now.
+
+
+def test_accessible_bores(show_result):
+    """
+    When finding bores, return only those that don't have stock above them.
+    """
+
+    # In the more complex part, one bore starts on the top,
+    # the other 3 are in a pocket.
+
+    # 1) Load a 3D model from a file
+    part = part_load("tests/simple-part-with-holes.step")
+
+    # 2) Generate fitting stock
+    stock = stock_make(part, margin=0)
+
+    # 3) Create tool and home it
+    tool = Tool(diameter=1.0, length=8)
+
+    # Create a bore operation
+    op = OperationBore(part=part, tool=tool, stock=stock)
+
+    # Should only be able to find one bore we can reach the depth.
+    op.find_bores()
+    assert len(op.bores) == 1  # Only 1 bore is accessible
+
+    if show_result:
+        show(part, stock)
+        time.sleep(3)
+        show_clear()
