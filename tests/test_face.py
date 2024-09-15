@@ -20,7 +20,7 @@ def test_basic_face(show_result, animate):
     # 3) The tool
 
     # 1) Load a 3D model from a file
-    fn_part = "simple-part.step"
+    fn_part = "simple-part-with-holes.step"
     part = part_load(fn_part)
 
     # 2) Generate fitting stock
