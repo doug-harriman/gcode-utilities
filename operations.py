@@ -26,12 +26,11 @@ from tools import Tool
 # TODO: Check bounding box dimensions against machine limits
 # TODO: Rotate the model if necessary to fit.
 # - If we can get principle axes, that should identify the minimum bounding box.
-# TODO: Pull  machining direction enum from toolpaths.py
 # TODO: Leverage concept of a gcode document from gcode_doc.py to manage general setup.
 # TODO: Allow setting of a bottom position just below bottom of part.
 
 # Operations todo list:
-# - Bore - spiral in.  Needed for starting a pocket.
+# - Bore - Spiral in.  Needed for starting a pocket.
 # - Slot - Useful for optimizing profiling to avoid completely machining stock that can be left alone.
 # - Face - Add new face operation to spiral in.
 # - Pocket - Spiral out.
@@ -643,7 +642,7 @@ class OperationBore(Operation):
     """
     Boring operation.
 
-    See: Operation
+    See: OperatioK}n
     """
 
     # TODO Should only bore holes in the part, not the stock.
@@ -685,20 +684,33 @@ class OperationBore(Operation):
         All ciricular holes with a diameter equal to or larger
         than this value will be bored.
 
-        If None, the minimum diameter to bore is 1.1 times the tool diameter plus
-        the radial stock to leave.
+        The minimum diameter is the greater of:
+        - 1.1 times the tool diameter.
+        - The tool diameter plus 2 times the radial stock to leave.
 
-        Defaults to None.
+        If set to None, will revert to that value.
+
         """
+
+        # Stock to leave may have been modified.
+        # Do a set/get cycle to ensure that the value is correct.
+        self.diameter_min = self._diameter_min
 
         return self._diameter_min
 
     @diameter_min.setter
     def diameter_min(self, value: float):
 
+        # Minimum bore diameter bounded by the tool diameter
+        # and the radial stock to leave.
+        diameter_min = max(
+            self.tool.diameter * 1.1,
+            self.tool.diameter + 2 * self.stock_to_leave_radial,
+        )
+
         # Allow value to be cleared
         if value is None:
-            self._diameter_min = None
+            self._diameter_min = diameter_min
             self._ops = []
             return
 
@@ -708,6 +720,11 @@ class OperationBore(Operation):
             raise ValueError("Value must be numeric.")
         if value < 0:
             raise ValueError("Value must be positive.")
+
+        # Check diameter against tool diameter
+        if value < diameter_min:
+            value = diameter_min
+
         self._diameter_min = value
         self._ops = []
 
@@ -754,21 +771,9 @@ class OperationBore(Operation):
 
         """
 
-        if len(self._bores) > 0:
-            return self._bores
-
-        # Minimum diameter to bore
-        if self.diameter_min is None:
-            diameter_min = (
-                self.tool.diameter * 1.1 + 2 * self.stock_to_leave_radial
-            )
-            self.diameter_min = diameter_min
-
         # Maximum diameter to bore
         if self.diameter_max is None:
-            self.diameter_max = (
-                1.98 * self.tool.diameter + 2 * self.stock_to_leave_radial
-            )
+            self.diameter_max = np.inf
 
         self._bores = []
         for bore in Bore.find_bores(self.part):
@@ -901,8 +906,9 @@ class OperationFace(Operation):
     See: Operation
     """
 
-    # TODO: Face over all of stock or just part
+    # TODO: Convert to spiral in pattern.
     # TODO: Machining direction: both, climb, standard(?)
+    # TODO: Face over all of stock or just part
 
     def __init__(
         self,

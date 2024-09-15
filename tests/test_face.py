@@ -26,7 +26,7 @@ def test_basic_face(show_result, animate):
     # 2) Generate fitting stock
     stock = stock_make(part, margin=2)
 
-    # Craeting stock will move the part
+    # Creating stock will move the part
     part_face_top = part.faces() >> Axis.Z
     part_face_top_z = part_face_top.vertices()[0].Z
 
@@ -36,7 +36,7 @@ def test_basic_face(show_result, animate):
 
     f = OperationFace(part=part, tool=tool, stock=stock)
     f.stock_to_leave_axial = 0.5
-    # f.stock_to_leave_radial = 0.5
+    # f.stock_to_leave_radial = 0.5s
     f.woc = tool.diameter * 0.4
     f.doc = 0.75
     f.generate()
