@@ -119,3 +119,50 @@ def test_accessible_bores(show_result):
         show(part, stock)
         time.sleep(3)
         show_clear()
+
+
+def test_boring(part, show_result, animate):
+    """
+    Test boring operation.
+    """
+
+    # Alsways need 3 pieces of geometry for a machining operation:
+    # 1) The part
+    # 2) The stock
+    # 3) The tool
+
+    # 1) Load a 3D model from a file -> Provided by fixture
+
+    # 2) Generate fitting stock
+    stock = stock_make(part, margin=0)
+    stock_vol_pre = stock.solid().volume
+
+    # 3) Create tool and home it
+    tool = Tool(diameter=1.5, length=25.4)
+
+    # Create a bore operation
+    op = OperationBore(part=part, tool=tool, stock=stock)
+    op.diameter_max = 4
+
+    # Look for bores.
+    op.find_bores()
+
+    # TODO: Estimate the volume of the bores to be removed.
+    # Calcuate material volume removed for later check.
+    stock_vol_post = stock_vol_pre
+    for bore in op.bores:
+        stock_vol_post -= bore.volume
+
+    # Machine the bores
+    op.generate()
+    op.save_gcode()
+    stock = op.cut(animate=animate)
+
+    assert stock_vol_post == pytest.approx(
+        stock.solid().volume, 0.1
+    )  # Stock volume vs. expected
+
+    if show_result:
+        show(part, stock)
+        time.sleep(3)
+        show_clear()
