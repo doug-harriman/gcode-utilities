@@ -38,17 +38,21 @@ def test_bore_count(part, show_result, animate):
     op = OperationBore(part=part, tool=tool, stock=stock)
 
     # Look for bores.
+    # Part has 4 bores
+    op.find_bores()
+    assert len(op.bores) == 4  # All bores
+
     op.diameter_min = 3
-    bores = op.bores
+    assert op.diameter_min == 3
+    bores = op.find_bores()
     assert len(bores) == 3  # 3 bores > 3 mm
 
     op.stock_to_leave_radial = 2
-    assert len(op.bores) == 1  # Only 7mm bore works with 1mm radial leave
+    op.find_bores()
+    assert len(op.bores) == 1  # Only 6mm bore works with 1mm radial leave
 
     op._stock_to_leave_radial = 0
     op.diameter_max = 5
     op.diameter_min = None
-    assert len(op.bores) == 3  # All but the 7mm bore
-
-    op.diameter_max = None
-    assert len(op.bores) == 4  # All bores
+    op.find_bores()
+    assert len(op.bores) == 3  # All but the 6mm bore

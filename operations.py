@@ -542,6 +542,12 @@ class Bore:
 
         self._bottom = Vertex(x, y, z_min)
 
+    def __str__(self) -> str:
+        return self.__repr__()
+
+    def __repr__(self) -> str:
+        return f"Bore(dia={self.diameter}, depth={self.depth})"
+
     @property
     def top(self) -> Vertex:
         """
@@ -693,8 +699,18 @@ class OperationBore(Operation):
         """
 
         # Stock to leave may have been modified.
-        # Do a set/get cycle to ensure that the value is correct.
-        self.diameter_min = self._diameter_min
+        # Minimum bore diameter bounded by the tool diameter
+        # and the radial stock to leave.
+        diameter_min = max(
+            self.tool.diameter * 1.1,
+            self.tool.diameter + 2 * self.stock_to_leave_radial,
+        )
+
+        if self._diameter_min is None:
+            self._diameter_min = diameter_min
+
+        if self._diameter_min < diameter_min:
+            self.diameter_min = diameter_min
 
         return self._diameter_min
 
@@ -760,6 +776,20 @@ class OperationBore(Operation):
         self._diameter_max = value
         self._ops = []
 
+    def find_bores(self) -> List[Bore]:
+        """
+        Find all bores in the that can be machined with the tool.
+
+        Note:
+        - Top of bore must be cleared.
+        - Bore must meet minimum diameter requirement, see diameter_min.
+        - Tool must be long enough to reach the bottom of the bore.
+        """
+
+        self.bores = Bore.find_bores(self.part)
+
+        return self.bores
+
     @property
     def bores(self) -> List[Bore]:
         """
@@ -770,18 +800,6 @@ class OperationBore(Operation):
         If set, autogeneration of list will not be performed.
 
         """
-
-        # Maximum diameter to bore
-        if self.diameter_max is None:
-            self.diameter_max = np.inf
-
-        self._bores = []
-        for bore in Bore.find_bores(self.part):
-            if (
-                bore.diameter >= self.diameter_min
-                and bore.diameter <= self.diameter_max
-            ):
-                self._bores.append(bore)
 
         return self._bores
 
@@ -794,16 +812,30 @@ class OperationBore(Operation):
             self._ops = []
             return
 
-        # Allow single wire to be passed in.
+        # Allow single Bore to be passed in.
         if not isinstance(value, list):
             if isinstance(value, Bore):
                 value = [value]
 
         if not isinstance(value, list):
             raise ValueError("Value must be a list.")
-        if not all(isinstance(v, Wire) for v in value):
-            raise ValueError("All values must be Wire objects.")
-        self._bores = value
+        if not all(isinstance(v, Bore) for v in value):
+            raise ValueError("All values must be Bore objects.")
+
+        # Maximum diameter to bore
+        if self.diameter_max is None:
+            self.diameter_max = np.inf
+
+        self._bores = []
+        for bore in value:
+            print(bore.diameter, self.diameter_min, self.diameter_max)
+            if (
+                bore.diameter >= self.diameter_min
+                and bore.diameter <= self.diameter_max
+                # TODO: add depth criteria
+            ):
+                self._bores.append(bore)
+
         self._ops = []
 
     def generate(self) -> None:
