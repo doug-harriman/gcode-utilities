@@ -832,7 +832,7 @@ class OperationBore(Operation):
             if (
                 bore.diameter >= self.diameter_min
                 and bore.diameter <= self.diameter_max
-                # TODO: add depth criteria
+                and bore.depth <= self.tool.length + self.stock_to_leave_axial
             ):
                 self._bores.append(bore)
 
