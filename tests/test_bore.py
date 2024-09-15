@@ -133,14 +133,14 @@ def test_boring(part, show_result, animate):
     stock_vol_pre = stock.solid().volume
 
     # 3) Create tool and home it
-    tool = Tool(diameter=1.5, length=25.4)
+    tool = Tool(diameter=3.175, length=25.4)
 
     # Create a bore operation
     op = OperationBore(part=part, tool=tool, stock=stock)
-    op.diameter_max = 4
 
     # Look for bores.
     op.find_bores()
+    assert len(op.bores) == 3  # 2x 4mm bores + 6mm bore
 
     # TODO: Estimate the volume of the bores to be removed.
     # Calcuate material volume removed for later check.

@@ -817,80 +817,83 @@ class OperationBore(Operation):
         if len(bores) == 0:
             raise ValueError("Part contains no bores")
 
-        # TODO: Loop on bores.
-        bore = self.bores[0]
+        # Loop on bores.
+        for bore in self.bores:
 
-        # Header
-        ops.append("\n")
-        ops.append(";---------------------")
-        ops.append("; Bore Operation")
-        ops.append(f"; Tool dia: {self.tool.diameter:0.3f}")
-        ops.append("; Center:")
-        ops.append(f";   X = {bore.top.X:0.3f}")
-        ops.append(f";   Y = {bore.top.Y:0.3f}")
-        ops.append(f"; Dia   = {bore.diameter:0.3f}")
-        ops.append(f"; Depth = {bore.depth:0.3f}")
-        ops.append(";---------------------")
+            # Header
+            ops.append("\n")
+            ops.append(";---------------------")
+            ops.append("; Bore Operation")
+            ops.append(f"; Tool dia: {self.tool.diameter:0.3f}")
+            ops.append("; Top Center:")
+            ops.append(f";   X = {bore.top.X:0.3f}")
+            ops.append(f";   Y = {bore.top.Y:0.3f}")
+            ops.append(f";   Z = {bore.top.Z:0.3f}")
+            ops.append(f"; Dia   = {bore.diameter:0.3f}")
+            ops.append(f"; Depth = {bore.depth:0.3f}")
+            ops.append(";---------------------")
 
-        radius = bore.radius - self.tool.radius - self.stock_to_leave_radial
-        x_center = bore.top.X
-        y_center = bore.top.Y
-        print(f"Center: {x_center}, {y_center}")
+            radius = bore.radius - self.tool.radius - self.stock_to_leave_radial
+            x_center = bore.top.X
+            y_center = bore.top.Y
+            print(f"Center: {x_center}, {y_center}")
 
-        # Make sure we're safe for positioning.
-        z = self.stock.bounding_box().max.Z
-        ops.append(op_safe_z)
+            # Make sure we're safe for positioning.
+            z = self.stock.bounding_box().max.Z
+            ops.append(op_safe_z)
 
-        # Move to pre-cut position
-        # Find intersection of line between tool position to hole center
-        # and the toolpath circle.
-        vect = self.tool.location.position - Vector(bore.top)
-        ratio = radius / vect.length
+            # Move to pre-cut position
+            # Find intersection of line between tool position to hole center
+            # and the toolpath circle.
+            vect = self.tool.location.position - Vector(bore.top)
+            ratio = radius / vect.length
 
-        x_start = bore.top.X + vect.X * ratio
-        y_start = bore.top.Y + vect.Y * ratio
-        print(f"Start: {x_start}, {y_start}")
+            x_start = bore.top.X + vect.X * ratio
+            y_start = bore.top.Y + vect.Y * ratio
+            print(f"Start: {x_start}, {y_start}")
 
-        ops.append(f"G0 X{x_start:0.3f} Y{y_start:0.3f} {str_speed_position}")
+            ops.append(
+                f"G0 X{x_start:0.3f} Y{y_start:0.3f} {str_speed_position}"
+            )
 
-        # Move tool to 1/2 DOC above bore top
-        z = bore.top.Z + self.doc / 2
-        ops.append(f"G0 Z{z:0.3f} {str_speed_position}")
+            # Move tool to 1/2 DOC above bore top
+            z = bore.top.Z + self.doc / 2
+            ops.append(f"G0 Z{z:0.3f} {str_speed_position}")
 
-        # Generate the Arc G-code
-        # https://marlinfw.org/docs/gcode/G002-G003.html
-        # Move in full circles spiraling down.
-        # Vector from current point to bore center point (X,Y)
-        I = x_center - x_start
-        J = y_center - y_start
-        z_min = bore.bottom.Z + self.stock_to_leave_axial
+            # Generate the Arc G-code
+            # https://marlinfw.org/docs/gcode/G002-G003.html
+            # Move in full circles spiraling down.
+            # Vector from current point to bore center point (X,Y)
+            I = x_center - x_start
+            J = y_center - y_start
+            z_min = bore.bottom.Z + self.stock_to_leave_axial
 
-        # First cut depth
-        z -= self.doc
-
-        # TODO: Spin up tool
-
-        # Degenerate case of a single pass that's smaller than the DOC.
-        if z < z_min:
-            z = z_min
-
-        while z >= z_min:
-            ops.append(f"G2 I{I:0.3f} J{J:0.3f} Z{z:0.3f} {str_speed_feed}")
-
-            # Look for last pass.
-            if z == z_min:
-                break
-
-            # Index down
+            # First cut depth
             z -= self.doc
+
+            # TODO: Spin up tool
+
+            # Degenerate case of a single pass that's smaller than the DOC.
             if z < z_min:
                 z = z_min
 
-        # Last path all at final depth.
-        ops.append(f"G2 I{I:0.3f} J{J:0.3f} {str_speed_feed}")
+            while z >= z_min:
+                ops.append(f"G2 I{I:0.3f} J{J:0.3f} Z{z:0.3f} {str_speed_feed}")
 
-        # Leave the tool at a safe height
-        ops.append(op_safe_z)
+                # Look for last pass.
+                if z == z_min:
+                    break
+
+                # Index down
+                z -= self.doc
+                if z < z_min:
+                    z = z_min
+
+            # Last path all at final depth.
+            ops.append(f"G2 I{I:0.3f} J{J:0.3f} {str_speed_feed}")
+
+            # Leave the tool at a safe height
+            ops.append(op_safe_z)
 
         self._ops = ops
 
