@@ -31,35 +31,30 @@ def test_find_bores(part, show_result, animate):
     # 3) The tool
 
     # 1) Load a 3D model from a file -> Provided by fixture
+    # Part has 4 bores of dia: 2mm, 4mm (2x), 6mm
 
     # 2) Generate fitting stock
     stock = stock_make(part, margin=0)
 
     # 3) Create tool and home it
-    tool = Tool(diameter=1.0, length=25.4)
+    tool = Tool(diameter=1.5, length=25.4)
 
     # Create a bore operation
     op = OperationBore(part=part, tool=tool, stock=stock)
 
     # Look for bores.
-    # Part has 4 bores
     op.find_bores()
-    assert len(op.bores) == 4  # All bores
+    assert len(op.bores) == 1  # Only the small bore
 
-    op.diameter_min = 3
-    assert op.diameter_min == 3
+    tool = Tool(diameter=2.5, length=25.4)
+    op = OperationBore(part=part, tool=tool, stock=stock)
     bores = op.find_bores()
-    assert len(bores) == 3  # 3 bores > 3 mm
+    assert len(bores) == 2  # The two 4mm dia bores
 
-    op.stock_to_leave_radial = 2
+    op.stock_to_leave_radial = 1
     op.find_bores()
     assert len(op.bores) == 1  # Only 6mm bore works with 1mm radial leave
-
-    op._stock_to_leave_radial = 0
-    op.diameter_max = 5
-    op.diameter_min = None
-    op.find_bores()
-    assert len(op.bores) == 3  # All but the 6mm bore
+    assert 6 == pytest.approx(op.bores[0].diameter, 0.01)
 
 
 def test_find_shallow_bore(part):
@@ -76,7 +71,7 @@ def test_find_shallow_bore(part):
     stock = stock_make(part, margin=0)
 
     # 3) Create tool and home it
-    tool = Tool(diameter=1.0, length=8)
+    tool = Tool(diameter=2.5, length=8)
 
     # Create a bore operation
     op = OperationBore(part=part, tool=tool, stock=stock)
@@ -88,7 +83,7 @@ def test_find_shallow_bore(part):
     # Now, leave some extra axial stock to reach the 10mm deep bores.
     op.stock_to_leave_axial = 4
     op.find_bores()
-    assert len(op.bores) == 4  # All are accessible now.
+    assert len(op.bores) == 2  # Both 4mm bores accessible now.
 
 
 def test_accessible_bores(show_result):
@@ -106,7 +101,7 @@ def test_accessible_bores(show_result):
     stock = stock_make(part, margin=0)
 
     # 3) Create tool and home it
-    tool = Tool(diameter=1.0, length=8)
+    tool = Tool(diameter=2.5, length=8)
 
     # Create a bore operation
     op = OperationBore(part=part, tool=tool, stock=stock)

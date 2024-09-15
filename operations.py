@@ -670,8 +670,6 @@ class OperationBore(Operation):
         part: Solid,
         tool: Tool,
         stock: Solid,
-        diameter_min: float = None,
-        diameter_max: float = None,
         **kwargs,
     ):
         super().__init__(
@@ -680,9 +678,6 @@ class OperationBore(Operation):
             stock,
             **kwargs,
         )
-
-        self._diameter_min = diameter_min
-        self._diameter_max = diameter_max
 
         self._bores = []
 
@@ -714,75 +709,29 @@ class OperationBore(Operation):
             self.tool.diameter + 2 * self.stock_to_leave_radial,
         )
 
-        if self._diameter_min is None:
-            self._diameter_min = diameter_min
-
-        if self._diameter_min < diameter_min:
-            self.diameter_min = diameter_min
-
-        return self._diameter_min
-
-    @diameter_min.setter
-    def diameter_min(self, value: float):
-
-        # Minimum bore diameter bounded by the tool diameter
-        # and the radial stock to leave.
-        diameter_min = max(
-            self.tool.diameter * 1.1,
-            self.tool.diameter + 2 * self.stock_to_leave_radial,
-        )
-
-        # Allow value to be cleared
-        if value is None:
-            self._diameter_min = diameter_min
-            self._ops = []
-            return
-
-        try:
-            value = float(value)
-        except ValueError:
-            raise ValueError("Value must be numeric.")
-        if value < 0:
-            raise ValueError("Value must be positive.")
-
-        # Check diameter against tool diameter
-        if value < diameter_min:
-            value = diameter_min
-
-        self._diameter_min = value
-        self._ops = []
+        return diameter_min
 
     @property
     def diameter_max(self) -> float:
         """
         Maximum diameter hole to bore.
 
+        The maximum bore diameter is 1.9x tool diameter (10% overlap) +
+          2x radial stock to leave.
+
         All ciricular holes with a diameter equal to or smaller
-        than this value will be bored.
+        than this value will be bored.  This limit is imposed so
+        that the full bore will be cleared.
 
-        If None, there is no upper limit imposed.
+        To bore larger diameter holes, either use a larger tool or
+        use a pocketing operation.
 
-        Defaults to None.
+        See: OperationPocket
         """
-        return self._diameter_max
 
-    @diameter_max.setter
-    def diameter_max(self, value: float):
+        diameter_max = 1.9 * self.tool.diameter + 2 * self.stock_to_leave_radial
 
-        # Allow value to be cleared
-        if value is None:
-            self._diameter_max = None
-            self._ops = []
-            return
-
-        try:
-            value = float(value)
-        except ValueError:
-            raise ValueError("Value must be numeric.")
-        if value < 0:
-            raise ValueError("Value must be positive.")
-        self._diameter_max = value
-        self._ops = []
+        return diameter_max
 
     def find_bores(self) -> List[Bore]:
         """
