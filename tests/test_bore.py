@@ -1,9 +1,9 @@
-# from build123d import (
-#     Solid,
-#     Axis,
-#     Color,
-#     import_step,
-# )
+from build123d import (
+    # Solid,
+    # Axis,
+    Color,
+    # import_step,
+)
 
 from ocp_vscode import show, show_clear
 import time
@@ -139,8 +139,9 @@ def test_boring(part, show_result, animate):
     op = OperationBore(part=part, tool=tool, stock=stock)
 
     # Look for bores.
-    op.find_bores()
+    bores = op.find_bores()
     assert len(op.bores) == 3  # 2x 4mm bores + 6mm bore
+    op.bores = bores[0]
 
     # TODO: Estimate the volume of the bores to be removed.
     # Calcuate material volume removed for later check.

@@ -18,6 +18,7 @@ from build123d import (
     Vertex,
     Location,
     Color,
+    AngularDirection,
     # Rectangle,
 )
 from builder123d_utils import *
@@ -382,10 +383,12 @@ class Operation(ABC):
         Converts operations to a wire.
         """
 
+        logger = logging.getLogger()
+
         if not self._ops:
             self.generate()
 
-        expr = "(?P<CMD>G\d+)\s*(X(?P<X>-?\d*\.?\d*))?\s*(Y(?P<Y>-?\d*\.?\d*))?\s*(Z(?P<Z>-?\d*\.?\d*))?"
+        expr = "(?P<CMD>G\d+)\s*(X(?P<X>-?\d*\.?\d*))?\s*(Y(?P<Y>-?\d*\.?\d*))?\s*(Z(?P<Z>-?\d*\.?\d*))?\s*(I(?P<I>-?\d*\.?\d*))?\s*(J(?P<J>-?\d*\.?\d*))?\s*(K(?P<K>-?\d*\.?\d*))?"
         expr = re.compile(expr)
 
         # Initial position
@@ -406,6 +409,8 @@ class Operation(ABC):
                 continue
 
             # Parse operation
+            logging.debug(f"Current pos: {pos}")
+            logging.debug(f"\tOperation: {op}")
             res = expr.match(op)
 
             # Skip ops that don't match
@@ -418,6 +423,8 @@ class Operation(ABC):
                 k: float(v) if v is not None else None for k, v in vals.items()
             }
 
+            logging.debug(f"\tParsed vals: {vals}")
+
             for k, v in vals.items():
                 if v is None:
                     if k == "X":
@@ -427,24 +434,89 @@ class Operation(ABC):
                     elif k == "Z":
                         vals[k] = pos.Z
 
-            vec = Vector(**vals)
+            logging.debug(f"\tCommand: {cmd}, vals: {vals}")
+            vec = Vector(vals["X"], vals["Y"], vals["Z"])
 
             # Process command
             if cmd == "G0" or cmd == "G1":
                 # Linear move
+                if np.isclose((pos - vec).length, 0):
+                    continue
                 e = Edge.make_line(pos, vec)
+
+                # TODO: This is probably common to all cases.
                 edges.append(e)
                 pos = vec
                 locations.append(Location(pos))
 
             elif cmd == "G2":
                 # Arc clockwise
-                raise NotImplementedError("G2 Arcs not implemented.")
+                # If planar, use circle.  Else, use helix.
+
+                assert vals["K"] is None, "G2/G3 K value not supported."
+                offset = Vector(vals["I"], vals["J"], 0)
+                radius = offset.length
+                center = pos + offset
+                logging.debug(f"\tCenter: {center}")
+                logging.debug(f"\tRadius: {radius}")
+
+                # Currently only support full circles, not arcs.
+                if not (pos.X == vec.X and pos.Y == vec.Y):
+                    raise NotImplementedError("G2/G3 Arcs not implemented.")
+
+                # Check if planar
+                if pos.Z == vec.Z:
+                    # https://build123d.readthedocs.io/en/latest/direct_api_reference.html#topology.Edge.make_circle
+                    e = Edge.make_circle(
+                        radius=radius,
+                        angular_direction=AngularDirection.CLOCKWISE,
+                    )
+
+                    # Circles are created at the origin, so move to center.
+                    e.move(Location(center))
+
+                    edges.append(e)
+                    pos = vec
+                    locations.append(Location(pos))
+
+                else:
+                    # Helix
+                    # https://build123d.readthedocs.io/en/latest/direct_api_reference.html#topology.Edge.make_helix
+
+                    # Helix start point is always (+r, 0, 0) shifted by center
+                    dz = vals["Z"] - pos.Z
+                    e = Edge.make_helix(
+                        pitch=dz,
+                        height=dz,
+                        radius=radius,
+                        center=center,
+                    )
+
+                    # Need to rotate helix about its axis so that its start point
+                    # is at the current point.
+                    v_helix_start = Vector(radius, 0, 0)
+                    v_current_pos = pos - center
+                    angle = v_helix_start.get_angle(v_current_pos)
+
+                    logging.debug(f"\tHelix start vec: {v_helix_start}")
+                    logging.debug(f"\tCurrent pos vec: {v_current_pos}")
+                    logging.debug(f"\tHelix start rotation: {angle} [deg]")
+
+                    e = e.rotate(Axis(center, (0, 0, 1)), -angle)
+
+                    edges.append(e)
+                    pos = vec
+                    locations.append(Location(pos))
+
             elif cmd == "G3":
                 # Arc counter-clockwise
                 raise NotImplementedError("G3 Arcs not implemented.")
             else:
                 raise ValueError(f"Unsupported G-code: {cmd}")
+
+        # from ocp_vscode import show
+
+        # show(self.part, edges)
 
         wire = Wire(edges)
         wire.label = f"Toolpath: {self}"
@@ -664,6 +736,7 @@ class OperationBore(Operation):
     # - Check that stock material exists in the bore, skip if not.
     # TODO: Should project cicle-like wires to an XY plane to see if there's
     #       a circular hole on a face that is not parallel to XY plane
+    #       See: Edge.project_to_shape()
 
     def __init__(
         self,
@@ -878,7 +951,7 @@ class OperationBore(Operation):
                 z = z_min
 
             while z >= z_min:
-                ops.append(f"G2 I{I:0.3f} J{J:0.3f} Z{z:0.3f} {str_speed_feed}")
+                ops.append(f"G2 Z{z:0.3f} I{I:0.3f} J{J:0.3f} {str_speed_feed}")
 
                 # Look for last pass.
                 if z == z_min:
@@ -890,6 +963,7 @@ class OperationBore(Operation):
                     z = z_min
 
             # Last path all at final depth.
+            # BUG: Lass pass edge is disconnected
             ops.append(f"G2 I{I:0.3f} J{J:0.3f} {str_speed_feed}")
 
             # Leave the tool at a safe height
