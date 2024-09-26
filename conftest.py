@@ -51,5 +51,5 @@ def part_load(fn: str) -> Solid:
 
     part = import_step(fn)
     part.label = Path(fn).stem
-    part.color = Color("Orange")
+    part.color = Color("Orange", alpha=0.5)
     return part
