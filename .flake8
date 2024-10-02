@@ -1,0 +1,57 @@
+[flake8]
+
+# Flake8 is a tool for linting and style checking python scripts
+# Install the following via pip:
+# - flake8               includes pyflakes, pycodestyle, and mccabe complexity checker
+# - flake8-annotations   catches missing type hints
+# - flake8-bandit        catches security issues
+# - flake8-bugbear       catches likely bugs and design problems
+# - flake8-builtins      catches using builtin keywords
+# - flake8-docstrings    catches docstring formatting issues
+# - flake8-isort         this module will also install isort which can be run to fix the imports list.
+# - flake8-self          catches the use of private variables outside of the class
+# - pep8-naming          catches PEP-8 naming convention violations
+
+
+# Configuration
+
+max-line-length = 120
+max-complexity = 15
+indent-size = 4
+
+# Ignoring these plugins TEMPORARILY until these errors can be fixed
+extend-ignore = I
+
+ignore =
+    # ANN002: Missing type for *args
+    ANN002,
+    # ANN003: Missing type for **kwargs
+    ANN003,
+    # ANN101: Missing type for self
+    ANN101,
+    # ANN102: Missing type for cls
+    ANN102,
+    # D203 is incompatible with D211
+    D203,
+    # D212 is incompatible with D213: multiline docstring should start on second line
+    D212,
+    # Subprocess module should be used carefully, but turning off errors for now.
+    S404,
+    S602,
+    S603,
+
+exclude =
+    .git,
+    .idea,
+    __pycache__,
+    venv,
+    # Ignoring pyside2 generated files.
+    # These files take too long to analyze and can't fix the errors that are found.
+    *_rc.py,
+    *_gui.py,
+	# Ignoring generated protobuf files.
+	*_pb2.py,
+
+# Fix files and remove exceptions when time allows
+per-file-ignores =
+	test_*: S101
