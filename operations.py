@@ -1,6 +1,9 @@
 # operations.py
 # Operations for CNC machining using builder123d.
 
+# Background info on the math concepts behind B-rep CAD.
+# https://www.shapr3d.com/blog/what-is-cad-the-technological-foundations-of-cad-software
+
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 import logging
@@ -733,7 +736,7 @@ class OperationBore(Operation):
     """
     Boring operation.
 
-    See: OperatioK}n
+    See: Operation
     """
 
     # TODO Should only bore holes in the part, not the stock.
