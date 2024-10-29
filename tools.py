@@ -88,7 +88,7 @@ class Tool(BasePartObject):
         normal = Vector(edge.vertices()[1] - edge.vertices()[0]).normalized()
 
         # Tool endpoint solid.
-        self.location = loc
+        self.position = edge.end_point()
         vol = self
 
         # Currently only handling XY cutting motions.
@@ -114,6 +114,54 @@ class Tool(BasePartObject):
         # Rotate the plane to match the tool orientation in the XY plane
         theta = Vector((1, 0, 0)).get_signed_angle(normal, Vector((0, 0, 1)))
         p = p.rotated((0, 0, theta))
+
+        # Extrude the 2D geometry to create the swept volume.
+        vol += sweep(p * r, path=edge)
+
+        return vol
+
+    def sweep_edge(self, edge: Edge) -> Solid:
+        """
+        Sweeps the tool from current location to specified location.
+
+        TODO: Should move the tool too.
+
+        Args:
+            edge (Edge): The edge to sweep.
+        Returns:
+            Solid: The swept volume.
+        """
+        # Need to project the cutting end & sides of the tool.
+
+        # Generate a vector from the edge to define a sweep plane normal.
+        normal = edge.tangent_at(0)  # Normal at start of edge.
+
+        # Tool endpoint solid.
+        vol = self
+
+        # Side projection
+        # 2D geo always created on the XY plane.
+        r = Rectangle(
+            self.diameter, self.length
+        )  # Created with center at origin.
+
+        # Move tool bottom center to origin.
+        r = r.translate((0, self.length / 2))
+
+        # Create a plane for projection, centered on the end of the tool,
+        # p = Plane.XY.rotated((90, 0, 0))  # Y-axis is normal to the tool end.
+        p = Plane.XY.rotated((90, 0, 0)).rotated(
+            (0, 0, 90)
+        )  # X-axis is normal to the tool end.
+
+        # Move the plane from the origin to the current tool location.
+        p = p.move(self.location)
+
+        # Rotate the plane to match the tool orientation in the XY plane
+        theta = Vector((1, 0, 0)).get_signed_angle(normal, Vector((0, 0, 1)))
+        p = p.rotated((0, 0, theta))
+
+        # TODO: Need to sweep the tool end geometry also.
 
         # Extrude the 2D geometry to create the swept volume.
         vol += sweep(p * r, path=edge)

@@ -2,6 +2,7 @@ from build123d import (
     # Solid,
     # Axis,
     Color,
+    Solid,
     # import_step,
 )
 
@@ -20,7 +21,7 @@ def part():
     return part_load("tests/bore-test-part.step")
 
 
-def test_find_bores(part, show_result, animate):
+def test_find_bores(part: Solid, show_result: bool, animate: bool):
     """
     Test to find bores by diameter and stock to leave.
     """
@@ -57,7 +58,7 @@ def test_find_bores(part, show_result, animate):
     assert 6 == pytest.approx(op.bores[0].diameter, 0.01)
 
 
-def test_find_shallow_bore(part):
+def test_find_shallow_bore(part: Solid):
     """
     Test to find bore with limited tool length.
     """
@@ -86,7 +87,7 @@ def test_find_shallow_bore(part):
     assert len(op.bores) == 2  # Both 4mm bores accessible now.
 
 
-def test_accessible_bores(show_result):
+def test_accessible_bores(show_result: bool):
     """
     When finding bores, return only those that don't have stock above them.
     """
@@ -116,7 +117,7 @@ def test_accessible_bores(show_result):
         show_clear()
 
 
-def test_boring(part, show_result, animate):
+def test_boring(part: Solid, show_result: bool, animate: bool):
     """
     Test boring operation.
     """

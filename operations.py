@@ -514,16 +514,21 @@ class Operation(ABC):
             else:
                 raise ValueError(f"Unsupported G-code: {cmd}")
 
-        # from ocp_vscode import show
+        show_plot = True
+        # show_plot = False
+        if show_plot:
+            from ocp_vscode import show, show_clear
 
-        # show(self.part, edges)
+            show_clear()
+            show(self.part, edges)
 
-        wire = Wire(edges)
-        wire.label = f"Toolpath: {self}"
+        # wire = Wire(edges)
+        # wire.label = f"Toolpath: {self}"
 
         self._locations = locations
 
-        return wire
+        # return wire
+        return edges
 
     def cut(self, animate: bool = False) -> Solid:
         """
@@ -540,7 +545,7 @@ class Operation(ABC):
             import time
 
         if not self._locations:
-            self.to_wire()  # Generates locations too.
+            edges = self.to_wire()  # Generates locations too.
 
         # Get stock properties.
         props = {}
@@ -553,10 +558,10 @@ class Operation(ABC):
         self._stock -= self.tool  # Avoid type check.
 
         # Iterate through the edges, removing material.
-        for loc in self._locations[1:]:
+        for edge in edges:
 
             # Remove cut volume from stock
-            cut = self.tool.sweep(loc)
+            cut = self.tool.sweep_edge(edge)
             self._stock -= cut
 
             if animate:
