@@ -1,6 +1,15 @@
 # slosh.py
 # Oscillates a tub of liquid back and forth to create a sloshing effect.
 
+# Notes on using heated bed to pre-heat
+# M86 sets/gets the heater timeout when no other commands are processed.
+# M86 S<timeout in sec>
+# Ender3Pro Default is 300 sec.
+# It takes quite a long time to heat a resonable volume of water in a glass dish.
+# Max supported bed temp is 110C.
+# Per MG Chemicals, optical etch temp is 35-55C, but should not be heated above 55C.
+# Density: 0.79 gm/ml
+
 import math
 from pint import Quantity as Q
 
@@ -73,7 +82,7 @@ def generate_sloshing_gcode(tub_length: Q, duration: Q = Q(10, "s")) -> str:
     # Generate G-code
     gcode = []
     gcode.append("; G-code to cause resonant sloshing of water")
-    gcode.append(f"; Tub length: {tub_length} [mm]")
+    gcode.append(f"; Tub length: {tub_length:0.1f~P}")
     gcode.append(
         f"; Natural frequency: {natural_frequency:.2f} [Hz], Period: {period_s:.3f} [sec]"
     )
@@ -83,6 +92,7 @@ def generate_sloshing_gcode(tub_length: Q, duration: Q = Q(10, "s")) -> str:
 
     # Enable motors
     gcode.append("M17  ; Enable all motors")
+    gcode.append("M017 ; All fans off")
 
     # Home Y- axis
     gcode.append("G28 Y; Home Y")
@@ -134,7 +144,7 @@ def generate_sloshing_gcode(tub_length: Q, duration: Q = Q(10, "s")) -> str:
 if __name__ == "__main__":
     # Parameters
     tub_length = Q(177.5, "mm")  # Length of the tub, long axis
-    tub_length = Q(127.5, "mm")  # Length of the tub, short axis
+    # tub_length = Q(127.5, "mm")  # Length of the tub, short axis
     duration = Q(20, "s")  # Duration of sloshing
     filename = "slosh.gcode"  # Output G-code filename
 
