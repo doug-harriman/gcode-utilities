@@ -7,6 +7,8 @@
 # Ender3Pro Default is 300 sec.
 # It takes quite a long time to heat a resonable volume of water in a glass dish.
 # Max supported bed temp is 110C.
+# M140 S<temperature deg> ; to set temperature.
+# Heating for 10-15 min at high temp, then reduce to ~40C should work.
 # Per MG Chemicals, optical etch temp is 35-55C, but should not be heated above 55C.
 # Density: 0.79 gm/ml
 
