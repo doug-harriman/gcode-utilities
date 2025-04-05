@@ -92,7 +92,7 @@ def generate_sloshing_gcode(tub_length: Q, duration: Q = Q(10, "s")) -> str:
 
     # Enable motors
     gcode.append("M17  ; Enable all motors")
-    gcode.append("M017 ; All fans off")
+    gcode.append("M107 ; All fans off")
 
     # Home Y- axis
     gcode.append("G28 Y; Home Y")
