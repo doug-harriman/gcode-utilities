@@ -1,2 +1,8 @@
+# Generated code
 __pycache__
 *.nc
+*.gcode
+
+# FreeCAD files
+*.FC*
+

@@ -154,9 +154,8 @@ if __name__ == "__main__":
     tub_length = Q(142, "mm")  # Length of the tub, long axis
     # tub_length = Q(127.5, "mm")  # Length of the tub, short axis
     duration = Q(15, "min")  # Duration of sloshing
-    filename = "slosh.gcode"  # Output G-code filename
 
-    # Generate G-code
+    filename = f"slosh-{duration.to('min').magnitude:02d}min.gcode"
     gcode = generate_sloshing_gcode(tub_length, duration=duration)
 
     # Output the G-code
