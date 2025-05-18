@@ -14,12 +14,8 @@ if __name__ == "__main__":
         description="G-Code utiltity functions for simple G-Code files."
     )
     parser.add_argument("file", help="G-Code input file name.")
-    filegroup = parser.add_argument_group(
-        title="Output file for G-Code transforms"
-    )
-    filegroup.add_argument(
-        "-o", "--out", default=None, help="Output file name.."
-    )
+    filegroup = parser.add_argument_group(title="Output file for G-Code transforms")
+    filegroup.add_argument("-o", "--out", default=None, help="Output file name..")
     filegroup.add_argument(
         "-r",
         "--replace",
@@ -85,13 +81,22 @@ if __name__ == "__main__":
         action="store_true",
     )
     ctransformgroup.add_argument(
-        "-x", help="X direction value.", type=float, default=0.0
+        "-rot",
+        "--rotate",
+        help="Rotate G-Code the specified angle about point 'x', 'y'.  Default to gcode center point, 0 deg.",
+        action="store_true",
     )
     ctransformgroup.add_argument(
-        "-y", help="Y direction value.", type=float, default=0.0
+        "-x", help="X direction/point value.", type=float, default=0.0
     )
     ctransformgroup.add_argument(
-        "-z", help="Z direction value.", type=float, default=0.0
+        "-y", help="Y direction/point value.", type=float, default=0.0
+    )
+    ctransformgroup.add_argument(
+        "-z", help="Z direction/point value.", type=float, default=0.0
+    )
+    ctransformgroup.add_argument(
+        "-ang", "--angle", help="Rotation angle.", type=float, default=0.0
     )
     ctransformgroup.add_argument(
         "-s",
@@ -193,6 +198,10 @@ if __name__ == "__main__":
         have_transform = True
         gcu.Translate(x=args.x, y=args.y, z=args.z)
 
+    if args.rotate:
+        have_transform = True
+        gcu.Rotate(angle=args.angle, x_center=args.x, y_center=args.y)
+
     if args.scale is not None:
         have_transform = True
         gcu.Scale(scale_factor=args.scale)
@@ -246,12 +255,8 @@ if __name__ == "__main__":
     def print_extents():
         ext = gcu.Extents()
         print(f"Extents: ")
-        print(
-            f"  x_min={ext[0]:0.3f}\t\ty_min={ext[1]:0.3f}\t\tz_min={ext[2]:0.3f}"
-        )
-        print(
-            f"  x_max={ext[3]:0.3f}\t\ty_max={ext[4]:0.3f}\t\tz_max={ext[5]:0.3f}"
-        )
+        print(f"  x_min={ext[0]:0.3f}\t\ty_min={ext[1]:0.3f}\t\tz_min={ext[2]:0.3f}")
+        print(f"  x_max={ext[3]:0.3f}\t\ty_max={ext[4]:0.3f}\t\tz_max={ext[5]:0.3f}")
         print(
             f"     dx={ext[3]-ext[0]:0.3f}\t\t   dy={ext[4]-ext[1]:0.3f}\t\t   dz={ext[5]-ext[2]:0.3f}"
         )

@@ -273,9 +273,7 @@ class GcodeUtils:
         with open(filename, "w") as fp:
             fp.write(self._gcode)
 
-    def Translate(
-        self, x: float = 0, y: float = 0, z: float = 0, xyz: np.array = None
-    ):
+    def Translate(self, x: float = 0, y: float = 0, z: float = 0, xyz: np.array = None):
         """
         Translates G-code by the specified X, Y and Z distances.
 
@@ -724,68 +722,83 @@ class GcodeUtils:
                 return f"{command}{self._to_str(value)}"
 
         # Perform scaling
-        self._gcode = re.sub(
-            f"{command}{self._re_num}", check_replace, self.gcode
-        )
+        self._gcode = re.sub(f"{command}{self._re_num}", check_replace, self.gcode)
 
-    def Rotate(self, rotation: np.ndarray = np.eye(3)):
+    def Rotate(
+        self, angle: float, x_center: float | None = None, y_center: float | None = None
+    ):
         """
-        Performs an in-place 3D rotation of the G-Code.
-        Will only modify lines that have an X, Y and Z position.
+        Rotates all G0 and G1 commands in the G-code about a specified point in the XY plane.
 
         Parameters
         ----------
-        rotation: 3x3 numpy.ndarray rotation matrix.
+        angle: float
+            Angle of rotation in degrees (counterclockwise).
+        x_center: float, optional
+            X coordinate of the rotation center (default: gcode center).
+        y_center: float, optional
+            Y coordinate of the rotation center (default: gcode center).
         """
+        import math
 
-        # Steps:
-        # - find our center point
-        # - tranlate so we're centered at the origin.
-        # - perform the rotation
-        # - tranlate back to our original position
+        # Precompute rotation matrix
+        theta = math.radians(angle)
+        cos_t = math.cos(theta)
+        sin_t = math.sin(theta)
+
+        # Calc center coords if not provided
         center = self.Center()
-        self.TranslateCenter()
+        if x_center is None:
+            x_center = center[0]
+        if y_center is None:
+            y_center = center[1]
 
-        # Rotation
-        def rot(match):
-            x = float(match.group(1))
-            y = float(match.group(2))
-            z = float(match.group(3))
+        # Regex to match G0 or G1 lines with X and Y (optionally Z and F)
+        # Example: G1 X12.3 Y45.6 Z-1.0 F1000
+        gline_re = re.compile(
+            r"^(?P<lead>\s*[GMgm][01][^XYZE]*)(X(?P<x>[+-]?[0-9.]+))?(\s*Y(?P<y>[+-]?[0-9.]+))?(\s*Z(?P<z>[+-]?[0-9.]+))?(\s*F(?P<f>[+-]?[0-9.]+))?",
+            re.IGNORECASE,
+        )
 
-            v = np.array([x, y, z])
-            # print(f'Before: {v}')
-            v = np.matmul(rotation, v)
-            # print(f'After : {v}')
+        def rotate_xy(x: float, y: float):
+            # Translate to origin, rotate, then translate back
+            x0 = x - x_center
+            y0 = y - y_center
+            xr = x0 * cos_t - y0 * sin_t + x_center
+            yr = x0 * sin_t + y0 * cos_t + y_center
+            return xr, yr
 
-            xs = self._to_str(v[0])
-            ys = self._to_str(v[1])
-            zs = self._to_str(v[2])
-
-            return f"X{xs} Y{ys} Z{zs}"
-
-        expr = f"X{self._re_num}\s*Y{self._re_num}\s*Z{self._re_num}"
-        self._gcode = re.sub(expr, rot, self._gcode)
-
-        # Return to starting position
-        self.Translate(xyz=center)
-
-    # def RotateAbout(self,x_center:float=0.0,y_center:float=0.0,angle_deg:float=0.0):
-    #     '''
-    #     Performs a 2D rotation of the G-Code in the X-Y plane about the
-    #     specified point.
-
-    #     Parameters
-    #     ----------
-    #     angle_deg: float
-    #         Angle of rotation expressed in degrees.
-    #     x_center: float
-    #         X coordinate of center point of rotation.
-    #     y_center: float
-    #         Y coordinate of center point of rotation.
-
-    #     See also: GcodeUtils.Center
-    #     '''
-    #     raise NotImplementedError()
+        new_lines = []
+        for line in self._gcode.splitlines():
+            m = gline_re.match(line)
+            if m and (m.group("x") is not None or m.group("y") is not None):
+                # Only rotate G0/G1 lines with X or Y
+                x = float(m.group("x")) if m.group("x") is not None else None
+                y = float(m.group("y")) if m.group("y") is not None else None
+                z = m.group("z")
+                f = m.group("f")
+                # Only rotate if at least one of X or Y is present
+                if x is not None or y is not None:
+                    # If missing X or Y, treat as 0 for rotation
+                    x_val = x if x is not None else 0.0
+                    y_val = y if y is not None else 0.0
+                    xr, yr = rotate_xy(x_val, y_val)
+                    # If X or Y was missing, do not emit it
+                    parts = [m.group("lead").rstrip()]
+                    if x is not None:
+                        parts.append(f"X{self._to_str(xr)}")
+                    if y is not None:
+                        parts.append(f"Y{self._to_str(yr)}")
+                    if z is not None:
+                        parts.append(f"Z{z}")
+                    if f is not None:
+                        parts.append(f"F{f}")
+                    new_line = " ".join(parts)
+                    new_lines.append(new_line)
+                    continue
+            # Default: keep line unchanged
+            new_lines.append(line)
+        self._gcode = "\n".join(new_lines)
 
 
 def checkfile(filename: str):
@@ -886,9 +899,7 @@ def extents(ctx, filename: str):
     print(f"Extents: ")
     print(f"\tx_min={ext[0]}\t\ty_min={ext[1]}\t\tz_min={ext[2]}")
     print(f"\tx_max={ext[3]}\t\ty_max={ext[4]}\t\tz_max={ext[5]}")
-    print(
-        f"\tdx={ext[3]-ext[0]}\t\t   dy={ext[4]-ext[1]}\t\t   dz={ext[5]-ext[2]}"
-    )
+    print(f"\tdx={ext[3]-ext[0]}\t\t   dy={ext[4]-ext[1]}\t\t   dz={ext[5]-ext[2]}")
 
 
 @task
