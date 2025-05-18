@@ -96,6 +96,9 @@ def generate_sloshing_gcode(tub_length: Q, duration: Q = Q(10, "s")) -> str:
     gcode.append("M17  ; Enable all motors")
     gcode.append("M107 ; All fans off")
 
+    # Turn on the bed heater
+    gcode.append("M140 S55 ; Set bed temperature to 55C")
+
     # Home Y- axis
     gcode.append("G28 Y; Home Y")
     gcode.append("")
@@ -139,15 +142,18 @@ def generate_sloshing_gcode(tub_length: Q, duration: Q = Q(10, "s")) -> str:
         )
         gcode.append(f"G4 P{beep_duration} ; wait")
 
+    # Turn off the bed heater
+    gcode.append("M140 S0 ; Turn off the bed heater")
+
     return "\n".join(gcode)
 
 
 # Example usage
 if __name__ == "__main__":
     # Parameters
-    tub_length = Q(177.5, "mm")  # Length of the tub, long axis
+    tub_length = Q(142, "mm")  # Length of the tub, long axis
     # tub_length = Q(127.5, "mm")  # Length of the tub, short axis
-    duration = Q(20, "s")  # Duration of sloshing
+    duration = Q(15, "min")  # Duration of sloshing
     filename = "slosh.gcode"  # Output G-code filename
 
     # Generate G-code
