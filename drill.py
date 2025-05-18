@@ -295,7 +295,7 @@ if __name__ == "__main__":
     # print(pattern.gcode)
 
     # Save to file
-    output_file = Path("drill_pattern.nc")
+    output_file = Path("drill-pattern.gcode")
     with open(output_file, "w") as f:
         f.write(pattern.gcode)
     print(f"G-code saved to {output_file}")
